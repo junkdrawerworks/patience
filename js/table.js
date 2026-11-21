@@ -59,10 +59,13 @@ export class Table {
     const pad = clamp(W * 0.02, narrow ? 4 : 6, 18);
     const gap = clamp(W * 0.012, narrow ? 3 : 4, 14);
     const rowGap = clamp(gap * 1.8, 8, 22);
+    // On a phone's touch screen the outer columns keep clear of the screen's sides, where Android's back gesture
+    // starts: --edge, from the stylesheet, is how far at least.
+    const side = Math.max(pad, parseFloat(getComputedStyle(this.el).getPropertyValue('--edge')) || 0);
     // Wide enough for every column, and short enough that a long column still fits below the top row.
     // `rows` is how many card heights that takes: in Klondike, a few face-down cards and eleven face-up ones
     // still showing their corners; Spider's columns run longer.
-    let cw = Math.min((W - 2 * pad - (cols - 1) * gap) / cols, (H - 2 * pad - rowGap) / (1.4 * (L.rows || 4.9)), 124);
+    let cw = Math.min((W - 2 * side - (cols - 1) * gap) / cols, (H - 2 * pad - rowGap) / (1.4 * (L.rows || 4.9)), 124);
     cw = Math.max(20, Math.floor(cw));
     const ch = Math.round(cw * 1.4);
     const left = Math.round((W - (cols * cw + (cols - 1) * gap)) / 2);

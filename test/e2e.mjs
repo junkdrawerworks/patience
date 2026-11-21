@@ -645,6 +645,41 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await c7.close();
 }
 
+// On a phone's touch screen, every card and empty place keeps 24 px from the screen's sides, where Android's back
+// gesture starts, in every game and at any phone width, with the deck on either side. The cards stay big enough to
+// read: Spider's, the narrowest, are more than 22 px across at 320 px. With a mouse, the table is as it was.
+{
+  const c8 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const p8 = await c8.newPage();
+  await p8.goto(base);
+  await p8.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const edges = () => p8.evaluate(() => {
+    const r = [...document.querySelectorAll('#table .card, #table .spot')].map(e => e.getBoundingClientRect()).filter(r => r.width);
+    return { left: Math.min(...r.map(b => b.left)), right: innerWidth - Math.max(...r.map(b => b.right)), cw: r[0].width };
+  });
+  for (const [width, height] of [[320, 568], [360, 740], [390, 844], [412, 915]]) {
+    await p8.setViewportSize({ width, height });
+    for (const left of [false, true]) {
+      await p8.evaluate(left => { const o = document.getElementById('o-left'); if (o.checked !== left) o.click(); }, left);
+      for (const v of ['k1', 'k3', 'fc', 's2']) {
+        await p8.evaluate(v => window.patience.newGame(v, 5), v);
+        await p8.waitForTimeout(400);
+        await p8.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+        const e = await edges();
+        assert.ok(e.left >= 23.5 && e.right >= 23.5, `${v} at ${width} px${left ? ', deck on the left' : ''}: a card is ${Math.min(e.left, e.right).toFixed(1)} px from the screen's side`);
+        assert.ok(e.cw >= 22.5, `${v} at ${width} px: the cards are ${e.cw} px across`);
+      }
+    }
+  }
+  await c8.close();
+  const c9 = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const p9 = await c9.newPage();
+  await p9.goto(base);
+  await p9.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  assert.equal(await p9.evaluate(() => Math.round(Math.min(...[...document.querySelectorAll('#table .card, #table .spot')].map(e => e.getBoundingClientRect().left)))), 9, 'with a mouse, the table keeps its own margin');
+  await c9.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
