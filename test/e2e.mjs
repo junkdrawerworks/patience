@@ -680,6 +680,62 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await c9.close();
 }
 
+// A Back that comes while a card is held, or within a second of the browser taking the touch away from the table (as
+// Android's back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays, as
+// it was. A Back a while later leaves the game in one press, as it always has.
+{
+  const c10 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const p10 = await c10.newPage();
+  const errors = [];
+  p10.on('pageerror', e => errors.push(e.message));
+  const ready = () => p10.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = () => p10.evaluate(() => JSON.stringify(window.patience.state));
+  const onGame = async why => { await p10.waitForTimeout(300); assert.equal(p10.url(), base, why); assert.equal(await p10.locator('.card').count(), 52, why); };
+  await p10.goto(base + 'icon.svg');
+  await p10.goto(base);
+  await ready();
+  await p10.evaluate(() => window.patience.newGame('k1', 11705));
+  await p10.waitForTimeout(1500);
+  await ready();
+  await p10.tap('#status');
+  const start = await now();
+  // The card at the foot of the first column, by the screen's side, picked up and dragged with a finger: Back comes mid-drag, and the drag carries on.
+  const cdp = await c10.newCDPSession(p10);
+  const box = await p10.locator(`.card[data-c="${JSON.parse(start).tab[0].up.at(-1)}"]`).boundingBox();
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  const touch = (type, dx = 0, dy = 0) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x: x + dx, y: y + dy }] });
+  await touch('touchStart'); await touch('touchMove', -10, 20); await touch('touchMove', -30, 60);
+  assert.equal(await p10.locator('.card.drag').count(), 1, 'the card is being dragged');
+  await p10.evaluate(() => history.back());
+  await onGame('a Back mid-drag should stay in the game');
+  assert.equal(await p10.locator('.card.drag').count(), 1, 'and the card is still in hand');
+  await touch('touchEnd');
+  await p10.waitForTimeout(300);
+  assert.equal(await now(), start, 'let go off any pile, the card went back');
+  // Picked up again, the browser takes the touch, and a Back follows: the card goes back, and the game stays.
+  await touch('touchStart'); await touch('touchMove', -10, 20);
+  assert.equal(await p10.locator('.card.drag').count(), 1, 'the card is being dragged again');
+  await touch('touchCancel');
+  await p10.evaluate(() => history.back());
+  await onGame('a Back just after the touch was taken should stay in the game');
+  assert.equal(await now(), start, 'the game is as it was');
+  assert.equal(await p10.locator('.card.drag').count(), 0);
+  // The same with pointer events alone, after a tap (which puts back the history step the slip used).
+  await p10.tap('#status');
+  await p10.evaluate(() => { const t = document.getElementById('table'); t.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, bubbles: true })); t.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 9, bubbles: true })); });
+  await p10.goBack({ waitUntil: 'commit', timeout: 1000 }).catch(() => {});
+  await onGame('a Back just after a cancelled touch should stay in the game');
+  assert.equal(await now(), start, 'the game is still as it was');
+  // A second later, Back leaves in one press.
+  await p10.tap('#status');
+  await p10.waitForTimeout(1100);
+  await p10.goBack();
+  await p10.waitForTimeout(300);
+  assert.equal(p10.url(), base + 'icon.svg', 'a Back a while after should leave the game');
+  assert.deepEqual(errors, []);
+  await c10.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`

@@ -6,6 +6,7 @@ import { Dealer, hintFor } from './deals.js';
 import { cascade } from './win.js';
 import { suitSprite } from './suits.js';
 import { shortName } from './cards.js';
+import { guardEdges } from './edge-guard.js';
 
 const KEY = 'patience.v1';
 const $ = id => document.getElementById(id);
@@ -58,6 +59,10 @@ const table = new Table($('table'), {
   move: (pile, n, to) => { if (!act(G().move(game, pile, n, to))) table.render(game); },
   touched: () => hideToast(),
 });
+// A Back that comes while a card is held, or just after the browser took a touch away from the table (as Android's
+// back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays as it was.
+// A Back meant to leave still leaves.
+guardEdges({ surfaces: [table.el] });
 const dealer = new Dealer(ready, () => write());
 
 // ---- playing ----
