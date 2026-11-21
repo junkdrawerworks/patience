@@ -682,7 +682,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
 
 // A Back that comes while a card is held, or within a second of the browser taking the touch away from the table (as
 // Android's back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays, as
-// it was. A Back a while later leaves the game in one press, as it always has.
+// it was. A Back a while later leaves the game in one press, as it always has: the guard's extra history entry goes on
+// when a finger touches the table and comes off a second after it lifts.
 {
   const c10 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
   const p10 = await c10.newPage();
@@ -698,13 +699,17 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await p10.waitForTimeout(1500);
   await ready();
   await p10.tap('#status');
+  const guarded = () => p10.evaluate(() => history.state?.__edgeGuard === true);
+  assert.equal(await guarded(), false, 'no extra history entry before the table is touched');
   const start = await now();
   // The card at the foot of the first column, by the screen's side, picked up and dragged with a finger: Back comes mid-drag, and the drag carries on.
   const cdp = await c10.newCDPSession(p10);
   const box = await p10.locator(`.card[data-c="${JSON.parse(start).tab[0].up.at(-1)}"]`).boundingBox();
   const x = box.x + box.width / 2, y = box.y + box.height / 2;
   const touch = (type, dx = 0, dy = 0) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x: x + dx, y: y + dy }] });
-  await touch('touchStart'); await touch('touchMove', -10, 20); await touch('touchMove', -30, 60);
+  await touch('touchStart');
+  assert.equal(await guarded(), true, 'a finger down on the table adds the extra entry');
+  await touch('touchMove', -10, 20); await touch('touchMove', -30, 60);
   assert.equal(await p10.locator('.card.drag').count(), 1, 'the card is being dragged');
   await p10.evaluate(() => history.back());
   await onGame('a Back mid-drag should stay in the game');
@@ -712,6 +717,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await touch('touchEnd');
   await p10.waitForTimeout(300);
   assert.equal(await now(), start, 'let go off any pile, the card went back');
+  await p10.waitForTimeout(1300);
+  assert.equal(await guarded(), false, 'a second after the finger lifts, the extra entry is gone again');
   // Picked up again, the browser takes the touch, and a Back follows: the card goes back, and the game stays.
   await touch('touchStart'); await touch('touchMove', -10, 20);
   assert.equal(await p10.locator('.card.drag').count(), 1, 'the card is being dragged again');
@@ -720,15 +727,17 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await onGame('a Back just after the touch was taken should stay in the game');
   assert.equal(await now(), start, 'the game is as it was');
   assert.equal(await p10.locator('.card.drag').count(), 0);
-  // The same with pointer events alone, after a tap (which puts back the history step the slip used).
-  await p10.tap('#status');
+  // The same with pointer events alone.
+  await p10.waitForTimeout(1300);
+  assert.equal(await guarded(), false, 'and a second after the touch was taken, too');
   await p10.evaluate(() => { const t = document.getElementById('table'); t.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, bubbles: true })); t.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 9, bubbles: true })); });
   await p10.goBack({ waitUntil: 'commit', timeout: 1000 }).catch(() => {});
   await onGame('a Back just after a cancelled touch should stay in the game');
   assert.equal(await now(), start, 'the game is still as it was');
   // A second later, Back leaves in one press.
   await p10.tap('#status');
-  await p10.waitForTimeout(1100);
+  await p10.waitForTimeout(1300);
+  assert.equal(await guarded(), false, 'with nothing on the table, there is no extra entry to press Back through');
   await p10.goBack();
   await p10.waitForTimeout(300);
   assert.equal(p10.url(), base + 'icon.svg', 'a Back a while after should leave the game');
