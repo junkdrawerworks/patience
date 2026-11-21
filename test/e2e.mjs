@@ -631,6 +631,20 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await c6.close();
 }
 
+// Swipes near the screen's sides. On Android with gesture navigation a swipe that starts near either side is the
+// phone's Back, and Chrome has its own swipe to go Back or Forward. A swipe sideways is nobody's, so it can't run on
+// into Chrome's: the page doesn't overscroll, and the table takes every touch.
+{
+  const c7 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const p7 = await c7.newPage();
+  await p7.goto(base);
+  await p7.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const look = await p7.evaluate(() => ['html', 'body', '#table'].map(s => { const c = getComputedStyle(document.querySelector(s)); return [s, c.overscrollBehaviorX, c.touchAction]; }));
+  assert.deepEqual(look.slice(0, 2).map(([s, o]) => [s, o]), [['html', 'none'], ['body', 'none']], 'the page should not overscroll sideways');
+  assert.equal(look[2][2], 'none', 'the table should take every touch');
+  await c7.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`

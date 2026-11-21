@@ -72,10 +72,13 @@
 
 * { box-sizing: border-box; }
 
+/* No swipe sideways starts the browser's Back or Forward (Chrome's overscroll navigation): a card dragged off the
+   table's side would otherwise leave the game. The table takes every touch itself (touch-action below). */
 html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--felt-edge);
   color: var(--on-felt);
   font-family: var(--font);
