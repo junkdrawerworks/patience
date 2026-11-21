@@ -47,6 +47,8 @@ export function guardEdges({ surfaces = [], history: own = true, onBack = null, 
   const slip = () => held.size > 0 || performance.now() - takenAt < slipMs;
 
   if (own) {
+    // A reload while the extra entry is current keeps it: it's already in place, so it counts as armed.
+    try { armed = !!window.history.state?.[STATE]; } catch { /* no history here */ }
     // The extra entry goes on at a tap (a user activation), so Back doesn't skip straight past it.
     const arm = () => {
       if (armed || leaving) return;
