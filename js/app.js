@@ -201,7 +201,8 @@ function start(state, again) {
 }
 
 async function hint() {
-  if (thinking || table.locked || !game || G().won(game)) return;
+  if (thinking || table.locked || !game) return;
+  if (over()) { toast('This one’s won.', [['New game', openNew]]); return; }
   if (chain) { setTimeout(hint, 120); return; } // let cards going up by themselves land first
   const at = game;
   thinking = true;
@@ -479,6 +480,7 @@ function openNew() {
   hideToast();
   $('new-note').hidden = !inPlay();
   $('b-restart').hidden = !game || !game.moves;
+  $('b-keep').textContent = game && over() ? 'Close' : 'Keep playing'; // a game won is over, so there's no playing on
   document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('current', b.dataset.v === (game?.v || settings.variant)));
   openSheet('sheet-new');
 }

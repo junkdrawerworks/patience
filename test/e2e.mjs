@@ -413,7 +413,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   const backToTable = async () => {
     await wonPanel();
     await p3.click('#b-pick');
-    await p3.click('#sheet-new button[data-close]');
+    assert.equal(await p3.textContent('#b-keep'), 'Close', 'no Keep playing on a won game');
+    await p3.click('#b-keep');
   };
   // FreeCell with everything up but the king and queen of diamonds, the king on the queen: tap the king to win.
   await p3.evaluate(() => {
@@ -453,12 +454,17 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await p3.mouse.up();
   await p3.waitForTimeout(1500);
   assert.equal(await p3.isHidden('#won'), true, 'not won again');
-  // Hint on won Spider says nothing and stays ready.
+  // Hint on won Spider says it's won, offers a new game, and stays ready.
   await p3.evaluate(playInto, { v: 's1', n: 3, steps: 99999 });
   await backToTable();
   await p3.click('#b-hint');
-  await p3.waitForTimeout(600);
+  await p3.waitForSelector('#toast:not([hidden])');
+  assert.equal(await p3.textContent('#toast'), 'This one’s won.New game');
   assert.equal(await p3.evaluate(() => document.getElementById('b-hint').classList.contains('busy')), false, 'Hint is ready');
+  await p3.click('#toast button');
+  assert.equal(await p3.isHidden('#sheet-new'), false, 'New game opens the New game sheet');
+  assert.equal(await p3.textContent('#b-keep'), 'Close');
+  await p3.click('#b-keep');
   assert.deepEqual(await p3.evaluate(() => [window.patience.stats.fc, window.patience.stats.k3]), [fcWin, kWin], 'each win counts once');
   // Start this deal again while another game is still being shuffled: the game started again is the one remembered.
   await p3.evaluate(() => window.patience.newGame('k1', 5));
@@ -919,7 +925,10 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   // The game B shows was won in A: leaving it now is no loss, and the streak stays.
   await b.click('#b-new');
   assert.equal(await b.isHidden('#new-note'), true, 'no loss for a game won in the other tab');
+  assert.equal(await b.textContent('#b-keep'), 'Close', 'and no playing on');
   await b.keyboard.press('Escape');
+  await b.keyboard.press('h');
+  assert.equal(await b.textContent('#toast'), 'This one’s won.New game');
   // A deals again, and B makes a move in the new game: A's win stays in the record, and A shows B's move.
   await a.mouse.click(30, 300);
   await a.click('#b-again');
@@ -999,6 +1008,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await ready();
   await p16.click('#b-new');
   assert.equal(await p16.isVisible('#b-restart'), true, 'Start this deal again after a move');
+  assert.equal(await p16.textContent('#b-keep'), 'Keep playing');
   await c16.close();
 }
 
