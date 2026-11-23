@@ -2,7 +2,7 @@
 
 import { VARIANTS, gameOf, label } from './games/index.js';
 import { Table } from './table.js';
-import { Dealer, hintFor, primeLine, deadEnd } from './deals.js';
+import { Dealer, hintFor, primeLine, deadEnd, backTo } from './deals.js';
 import { cascade } from './win.js';
 import { suitSprite } from './suits.js';
 import { shortName } from './cards.js';
@@ -115,11 +115,11 @@ function act(next, m) {
 // go by where it is: with the deck empty, the tap turns it over; a card already passed on the waste (where it may even
 // be showing, under the top card) comes round again. (`again`: the note is showing already, and isn't read out again
 // after each draw unless its words change.)
-function drawFor(c, again) {
+function drawFor(c, again, lead) {
   table.showHint({ stock: true, c });
   const name = shortName(c);
-  const words = !game.stock.length ? `Turn the deck over for the ${name}.`
-    : game.waste.includes(c) ? `Keep drawing: the ${name} comes round again.` : `Draw for the ${name}.`;
+  const words = (lead ? lead + ' ' : '') + (!game.stock.length ? `Turn the deck over for the ${name}.`
+    : game.waste.includes(c) ? `Keep drawing: the ${name} comes round again.` : `Draw for the ${name}.`);
   const shown = !again || $('toast-words').textContent !== words;
   if (shown) toast(words, [], 0);
   noting = true;
@@ -204,7 +204,7 @@ async function lookForMoves() {
     }
   }
   if (stale() || over() || d.result !== 'dead') return;
-  toast(d.none ? 'There are no moves left.' : 'There are no moves left that help.', [['Undo', undo], ['New game', openNew]]);
+  toast(d.none ? 'There are no moves left.' : 'There are no moves left that help.', [['Take me back', () => takeBack(at)], ['Undo', undo], ['New game', openNew]]);
 }
 
 function cancelChain() { clearTimeout(chain); chain = 0; }
@@ -312,41 +312,75 @@ function start(state, again) {
   landed = setTimeout(() => { table.locked = false; after(); }, table.dealDuration && table.dealDuration + 150);
 }
 
-async function hint() {
-  if (thinking) { pressed = true; return; } // answered once this search is done, for the table as it is then
-  if (table.locked || !game) return;
-  if (over()) { toast('This one’s won.', [['New game', openNew]]); return; }
-  if (chain) { setTimeout(hint, 120); return; } // let cards going up by themselves land first
-  const at = game;
+// Hint's search, or Take me back's, for table `at`, with the Hint button pulsing and, after a moment, Thinking… where the
+// deal's name goes. Resolves with what `search()` found, or with nothing if the table has gone by the time it knows (a
+// move, Undo or a new game): then a press of Hint since then is answered for the table as it is now.
+async function thinkAbout(at, search) {
   thinking = true;
   pressed = false;
   $('b-hint').classList.add('busy');
   clearTimeout(slowHint);
   slowHint = setTimeout(() => { if (game === at && !table.locked) { $('status').textContent = THINKING; say(THINKING); } }, 700);
-  let h;
+  let found;
   try {
-    // A search for a table that has gone (a move, Undo or a new game) stops at once, so a press since then needn't wait.
-    h = await hintFor(game, { auto: settings.auto }, { stale: () => game !== at });
+    // A search for a table that has gone stops at once, so a press since then needn't wait.
+    found = await search(() => game !== at);
   } finally {
     thinking = false;
     $('b-hint').classList.remove('busy');
     clearTimeout(slowHint);
     if ($('status').textContent === THINKING) showInfo();
   }
-  if (game !== at) { // they moved on while it was thinking: a press since then is for the table as it is now
-    if (pressed) hint();
-    return;
-  }
+  if (game === at) return found;
+  if (pressed) hint();
+  return null;
+}
+
+// `lead`: words to say first (where Take me back went), with the move Hint shows.
+async function hint(lead) {
+  if (thinking) { pressed = true; return; } // answered once this search is done, for the table as it is then
+  if (table.locked || !game) return;
+  if (over()) { toast('This one’s won.', [['New game', openNew]]); return; }
+  if (chain) { setTimeout(hint, 120, lead); return; } // let cards going up by themselves land first
+  const at = game;
+  const h = await thinkAbout(at, stale => hintFor(game, { auto: settings.auto }, { stale }));
+  if (!h) return;
+  const back = [['Take me back', () => takeBack(at)], ['Undo', undo], ['New game', openNew]];
   if (h.move) {
     // Drawing for a card further down the deck, only the deck lights up, so the note says which card.
     // (That note is read out as it shows, so the line a screen reader reads says nothing more.)
-    if (h.move.c !== undefined) drawFor(h.move.c);
-    else { table.showHint(h.move); say(hintWords(G(), game, h.move)); }
+    if (h.move.c !== undefined) drawFor(h.move.c, false, lead);
+    else {
+      table.showHint(h.move);
+      if (lead) toast(lead, [], 6000);
+      say(hintWords(G(), game, h.move));
+    }
   } else if (h.lost && !history.length) {
     // As dealt, with nothing to undo. (Looks like: Klondike's first search can stand, so it isn't always proven.)
     toast('Looks like this deal can’t be won, however it’s played.', [['New game', openNew]]);
-  } else if (h.lost) toast('Looks like there’s no way to win from here. Undo a few moves to try another way.', [['Undo', undo], ['New game', openNew]]);
-  else toast('There are no moves left.', [['New game', openNew]]);
+  } else if (h.lost) toast('Looks like there’s no way to win from here.', back);
+  else toast('There are no moves left.', history.length ? back : [['New game', openNew]]);
+}
+
+// Back to the last table on the way to `at` that the game can still be won from, when Hint, or the game by itself, has
+// said it can't be won from `at`: as many moves back as that takes, saying how many, and then Hint shows the way on.
+// It looks over the moves made a few at a time, halving them, at about Hint's speed each look, with Hint pulsing.
+async function takeBack(at) {
+  if (thinking || table.locked || over() || game !== at || !history.length) return;
+  cancelChain();
+  table.clearHint();
+  const tables = [...history, game];
+  const r = await thinkAbout(at, stale => backTo(tables, { auto: settings.auto }, { stale }));
+  if (!r) return;
+  if (r.none) { toast('Looks like this deal can’t be won, however it’s played.', [['New game', openNew]]); return; }
+  const moves = tables.length - 1 - r.at;
+  news = null;
+  game = tables[r.at];
+  history = tables.slice(0, r.at);
+  table.render(game);
+  showInfo();
+  write();
+  hint(`Back ${plural(moves, 'move')}, to where it can still be won.`);
 }
 
 // Play the move Hint is showing (Enter): a tap on the deck, or those cards to where it says.
@@ -639,7 +673,7 @@ function apply() {
 
 $('b-new').addEventListener('click', openNew);
 $('b-undo').addEventListener('click', undo);
-$('b-hint').addEventListener('click', hint);
+$('b-hint').addEventListener('click', () => hint());
 $('b-menu').addEventListener('click', () => {
   showStats(game?.v || settings.variant);
   const name = VARIANTS[game?.v || settings.variant].name;

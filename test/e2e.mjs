@@ -1041,9 +1041,60 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pl.click('#b-hint');
   await pl.waitForSelector('#toast:not([hidden])', { timeout: 30000 });
   assert.match(await pl.textContent('#toast-words'), /no way to win from here/);
-  assert.deepEqual(await pl.locator('#toast button').allTextContents(), ['Undo', 'New game']);
+  assert.deepEqual(await pl.locator('#toast button').allTextContents(), ['Take me back', 'Undo', 'New game']);
   assert.deepEqual(errors, [], 'errors on a deal that can’t be won');
   await cl.close();
+}
+
+// When Hint says there's no way to win from here, Take me back goes back to the last table it can still be won from,
+// says how far, and lights up the way on from there; Undo beside it still goes back one move. One-suit Spider: three
+// tables one move from won, then two where a 7 can only go back and forth, and the table now, the same.
+{
+  const ck = await browser.newContext({ viewport: { width: 360, height: 740 }, hasTouch: true, serviceWorkers: 'block' });
+  const pk = await ck.newPage();
+  const errors = [];
+  pk.on('pageerror', e => errors.push(e.message));
+  const ready = () => pk.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pk.goto(base);
+  await ready();
+  const tables = await pk.evaluate(() => {
+    const sp = r => [0, r];
+    const table = (cleared, cols) => {
+      const used = {};
+      const next = (suit, rank) => { const k = suit * 13 + rank - 1; used[k] = (used[k] || 0) + 1; return (used[k] - 1) * 52 + k; };
+      const sets = Array.from({ length: cleared }, () => Array.from({ length: 13 }, (_, r) => next(0, r + 1)));
+      const tab = cols.map(([down, up]) => ({ down: down.map(([su, r]) => next(su, r)), up: up.map(([su, r]) => next(su, r)) }));
+      return { v: 's1', deal: 7, tab, stock: [], sets, moves: 100 };
+    };
+    const nearly = table(7, [[[], [13, 12, 11, 10, 9, 8].map(sp)], [[], [7, 6, 5, 4, 3, 2, 1].map(sp)], ...Array.from({ length: 8 }, () => [[], []])]);
+    const stuck = table(5, [
+      [[sp(2), sp(2)], [sp(8), sp(7)]], [[sp(2), sp(4)], [sp(8)]], [[sp(4), sp(4), sp(6)], [sp(13)]], [[sp(6), sp(6), sp(9)], [sp(13)]],
+      [[sp(9), sp(9), sp(10)], [sp(13)]], [[sp(10), sp(10), sp(12)], [sp(11)]], [[sp(12), sp(12), sp(1)], [sp(11)]],
+      [[sp(1), sp(3), sp(3)], [sp(5)]], [[sp(5), sp(7), sp(11)], [sp(3)]], [[sp(7), sp(8), sp(5)], [sp(1)]],
+    ]);
+    window.patience.load(stuck, 0, [nearly, nearly, nearly, stuck, stuck]);
+    return { nearly, stuck };
+  });
+  await ready();
+  await pk.click('#b-hint');
+  await pk.waitForFunction(() => /no way to win/.test(document.getElementById('toast-words').textContent), null, { timeout: 30000 });
+  assert.equal(await pk.textContent('#toast-words'), 'Looks like there’s no way to win from here.');
+  assert.deepEqual(await pk.locator('#toast button').allTextContents(), ['Take me back', 'Undo', 'New game']);
+  const fits = await pk.evaluate(() => { const t = document.getElementById('toast').getBoundingClientRect(); return t.left >= 0 && t.right <= innerWidth; });
+  assert.ok(fits, 'the message and its three buttons fit on a 360 px phone');
+  await pk.click('#toast button:text("Take me back")');
+  await pk.waitForFunction(() => document.querySelectorAll('.hint').length === 2, null, { timeout: 30000 });
+  assert.equal(await pk.textContent('#toast-words'), 'Back 3 moves, to where it can still be won.');
+  assert.deepEqual(await pk.evaluate(() => window.patience.state), tables.nearly, 'back at the last table it can be won from');
+  // Undo from there goes back one more, as ever.
+  await pk.click('#b-undo');
+  await ready();
+  assert.deepEqual(await pk.evaluate(() => window.patience.state), tables.nearly);
+  await pk.click('#b-undo');
+  await ready();
+  assert.equal(await pk.isDisabled('#b-undo'), true, 'and Undo still goes all the way back, to the first of the three');
+  assert.deepEqual(errors, [], 'errors taking a game back to where it can be won');
+  await ck.close();
 }
 
 // A second press of Hint while it's still thinking about the first isn't lost when the cards move in between: it
@@ -1501,7 +1552,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c15.close();
 }
 
-// Once no move can help, the game says so after the move, with Undo and New game: in FreeCell with one card going back
+// Once no move can help, the game says so after the move, with Take me back, Undo and New game: in FreeCell with one card going back
 // and forth (deal 3001), and in Spider where it takes a look at about a thousand tables, a slice at a time, to be sure
 // (deal 68,977). Undo takes the message away. Spider with too few cards on the table to fill every column isn't stuck:
 // the deck deals its row once each card has a column of its own.
@@ -1513,7 +1564,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ready();
   const told = async (text, why) => {
     await p18.waitForSelector('#toast:not([hidden])', { timeout: 5000 });
-    assert.equal(await p18.textContent('#toast'), text + 'UndoNew game', why);
+    assert.equal(await p18.textContent('#toast'), text + 'Take me backUndoNew game', why);
     // Only the words are read out as the message shows, not the buttons after them.
     assert.equal(await p18.textContent('#toast [role="status"]'), text);
   };

@@ -271,3 +271,38 @@ export async function hintFor(state, { auto = true } = {}, { stale } = {}) {
   }
   return { lost: true };
 }
+
+// The way through Hint's search finds from table `state` in its budget, or null if it finds none: there's no way to win
+// from there, or it ran out of positions before it knew. Drawing three with cards going up by themselves off, it looks
+// first with them on, as hintFor() does.
+async function wayFrom(state, auto, stale) {
+  const game = gameOf(state);
+  if (!auto && state.v === 'k3') {
+    const on = await think(game.search(state, { auto: true }), game.budget.hint, null, stale);
+    if (on.result === 'won' || stale?.()) return on.result === 'won' ? on.path : null;
+  }
+  const search = await think(game.search(state, { auto }), game.budget.hint, null, stale);
+  return search.result === 'won' ? search.path : null;
+}
+
+// The last table on the way to this one from which the game can still be won, for when Hint has said it can't be won
+// from here. `tables` are the tables the game has been through, the deal first and the table now last. Once a table
+// can't be won, no table after it can be either, so it halves the stretch it's looking in each time: about eight looks
+// for sixty moves. Resolves with one of:
+//   { at }          tables[at] is the last it found a way through from; Hint is primed with that way, so its next
+//                   press there shows the way on at once
+//   { none: true }  it found no way through from any table it looked at, the deal included
+//   { stale: true } stale() said the answer wasn't wanted any more, so it stopped looking
+export async function backTo(tables, { auto = true } = {}, { stale } = {}) {
+  let lo = -1, hi = tables.length - 1, path = null;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    const way = await wayFrom(tables[mid], auto, stale);
+    if (stale?.()) return { stale: true };
+    if (way) { lo = mid; path = way; } else hi = mid;
+  }
+  if (lo < 0) return { none: true };
+  circling = new Set();
+  keep(follow(gameOf(tables[lo]), tables[lo], path, auto), auto);
+  return { at: lo };
+}

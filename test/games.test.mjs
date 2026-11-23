@@ -7,7 +7,7 @@ import { freecell, room } from '../js/games/freecell.js';
 import { spider } from '../js/games/spider.js';
 import { VARIANTS } from '../js/games/index.js';
 import { READY_DEALS } from '../js/games/ready-deals.js';
-import { hintFor, primeLine, Dealer, deadEnd } from '../js/deals.js';
+import { hintFor, primeLine, Dealer, deadEnd, backTo } from '../js/deals.js';
 import { SpiderSearch, SpiderSure } from '../js/solvers/spider.js';
 
 const S = 0, H = 1, C = 2, D = 3;
@@ -373,6 +373,36 @@ test('Spider is out of moves when cards can only go back and forth, and Hint say
   assert.ok(spider.move(s, 't0', 1, 't1'), 'the 7 can move');
   assert.equal(spider.outOfMoves(s), true);
   assert.deepEqual(await hintFor(s), { lost: true });
+});
+
+// The Spider table above, where the 7 can only go back and forth: no way to win from it.
+const stuck = () => spiderEnd('s1', [5], [
+  [[sp(2), sp(2)], [sp(8), sp(7)]], [[sp(2), sp(4)], [sp(8)]], [[sp(4), sp(4), sp(6)], [sp(13)]], [[sp(6), sp(6), sp(9)], [sp(13)]],
+  [[sp(9), sp(9), sp(10)], [sp(13)]], [[sp(10), sp(10), sp(12)], [sp(11)]], [[sp(12), sp(12), sp(1)], [sp(11)]],
+  [[sp(1), sp(3), sp(3)], [sp(5)]], [[sp(5), sp(7), sp(11)], [sp(3)]], [[sp(7), sp(8), sp(5)], [sp(1)]],
+]);
+// One move from won: the 7 to the ace onto the 8.
+const nearly = () => spiderEnd('s1', [7], [
+  [[], [13, 12, 11, 10, 9, 8].map(sp)], [[], [7, 6, 5, 4, 3, 2, 1].map(sp)], ...Array.from({ length: 8 }, () => [[], []]),
+]);
+
+test('Take me back finds the last table it can still be won from in a few looks, and Hint carries on from there', async () => {
+  for (const [won, lost] of [[3, 3], [60, 1], [0, 9], [1, 63]]) {
+    const tables = [...Array.from({ length: won }, nearly), ...Array.from({ length: lost }, stuck)];
+    let looks = 0;
+    const search = spider.search;
+    spider.search = (...a) => { looks++; return search(...a); };
+    let r;
+    try { r = await backTo(tables); } finally { spider.search = search; }
+    assert.deepEqual(r, won ? { at: won - 1 } : { none: true }, `${won} tables it can be won from, then ${lost} it can't`);
+    assert.ok(looks <= Math.ceil(Math.log2(tables.length)), `${looks} looks for ${tables.length} tables`);
+    if (won) {
+      const h = await hintFor(tables[won - 1]);
+      assert.deepEqual(h, { move: { from: 't1', n: 7, to: 't0' } }, 'Hint shows the way on from there');
+    }
+  }
+  const asked = { n: 0 };
+  assert.deepEqual(await backTo([nearly(), stuck(), stuck()], {}, { stale: () => ++asked.n > 0 }), { stale: true });
 });
 
 test('Spider is out of moves when it takes a long look to be sure nothing helps', () => {
