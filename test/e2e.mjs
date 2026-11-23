@@ -1931,6 +1931,54 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cb.close();
 }
 
+// Held sideways, once a long column has made the cards smaller, they stay that size for the rest of the deal rather
+// than growing back each time it's played down: two-suit Spider deal 5 played through, at 844 by 390. A turn of the
+// phone starts afresh, at the new size, and the longest column the deal had still fits after it.
+{
+  const cz = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pz = await cz.newPage();
+  await pz.goto(base);
+  await pz.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const replay = await pz.evaluate(async () => {
+    const { VARIANTS } = await import('./js/games/index.js');
+    const game = VARIANTS.s2.game, table = document.getElementById('table');
+    const cw = () => parseFloat(table.style.getPropertyValue('--cw'));
+    const fits = () => Math.max(...[...table.querySelectorAll('.card')].map(e => e.getBoundingClientRect().bottom)) <= table.getBoundingClientRect().bottom + 0.5;
+    let s = game.deal(5, 's2');
+    const search = game.search(s);
+    while (!search.result && search.nodes < 400000) search.step(5000);
+    window.patience.settings.auto = false;
+    const sizes = [], tables = [];
+    let fit = true;
+    for (const m of search.path.slice(0, -1)) {
+      const ui = game.fromSolver(s, m);
+      s = ui.stock ? game.stock(s) : game.move(s, ui.from, ui.n, ui.to);
+      window.patience.load(s, 0);
+      sizes.push(cw());
+      tables.push(s);
+      fit &&= fits();
+    }
+    window.__tables = tables;
+    return { sizes, fit, grew: sizes.findIndex((w, i) => i && w > sizes[i - 1]) };
+  });
+  assert.ok(Math.min(...replay.sizes) < replay.sizes[0], 'a long column made the cards smaller');
+  assert.equal(replay.grew, -1, `the cards grew back after move ${replay.grew + 1}: ${[...new Set(replay.sizes)].join(', ')} px`);
+  assert.ok(replay.fit, 'every card on the table');
+  // A new size starts afresh: the columns near the end are short, so the cards grow back. Then the longest column the
+  // deal had, back on the table, still fits.
+  await pz.setViewportSize({ width: 740, height: 360 });
+  await pz.waitForTimeout(300);
+  const after = await pz.evaluate(() => parseFloat(document.getElementById('table').style.getPropertyValue('--cw')));
+  assert.ok(after > Math.min(...replay.sizes), `after a turn the cards are still ${after} px, the size the longest column made them`);
+  const long = await pz.evaluate(() => {
+    const table = document.getElementById('table'), rows = s => Math.max(...s.tab.map(t => t.down.length + 3 * t.up.length));
+    window.patience.load(window.__tables.reduce((a, b) => (rows(b) > rows(a) ? b : a)), 0);
+    return { fit: Math.max(...[...table.querySelectorAll('.card')].map(e => e.getBoundingClientRect().bottom)) <= table.getBoundingClientRect().bottom + 0.5, cw: parseFloat(table.style.getPropertyValue('--cw')) };
+  });
+  assert.ok(long.fit && long.cw < after, `the longest column fits, the cards ${long.cw} px`);
+  await cz.close();
+}
+
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.
 {
   const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });

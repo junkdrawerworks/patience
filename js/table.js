@@ -30,7 +30,13 @@ export class Table {
     el.addEventListener('pointerup', e => this.up(e));
     el.addEventListener('pointercancel', e => this.up(e, true));
     el.addEventListener('contextmenu', e => e.preventDefault());
-    new ResizeObserver(() => { if (this.state) { this.layout(); this.render(this.state, { still: true }); } }).observe(el);
+    new ResizeObserver(() => {
+      if (!this.state) return;
+      // A new size starts the card size afresh (see layout()).
+      if (this.m && (this.m.W !== el.clientWidth || this.m.H !== el.clientHeight)) this.tall = null;
+      this.layout();
+      this.render(this.state, { still: true });
+    }).observe(el);
   }
 
   get game() { return gameOf(this.state); }
@@ -72,14 +78,19 @@ export class Table {
     // A column longer than that, even with its cards stepped as close as they go (see place()), makes the cards smaller,
     // and smaller cards need a little more of each card showing to read its rank (see stepUp()). But not below 28 px
     // across (about a phone's Spider cards held upright), where they'd be harder to read than a closer column.
+    // Once a column has made the cards smaller, they stay that size for the rest of the deal, even when it gets shorter
+    // again (`need`, from this.tall: the most rows the deal has needed so far), rather than growing and shrinking back
+    // and forth as a column is played down and built up. A new deal, or a new size of table, starts afresh.
     const fit = rows => Math.max(20, Math.floor(Math.min((W - 2 * side - (cols - 1) * gap) / cols, (H - 2 * pad - rowGap) / (1.4 * rows), 124)));
     const usual = fit(L.rows || 4.9), least = Math.min(usual, 28);
-    let step = stepUp(usual), cw = Math.max(least, fit(rowsFor(s, L, step)));
-    for (let i = 0; i < 4 && stepUp(cw) > step; i++) { step = stepUp(cw); cw = Math.max(least, fit(rowsFor(s, L, step))); }
+    const need = step => this.rowsNeeded(s, L, step);
+    let step = stepUp(usual), cw = Math.max(least, fit(need(step)));
+    for (let i = 0; i < 4 && stepUp(cw) > step; i++) { step = stepUp(cw); cw = Math.max(least, fit(need(step))); }
+    this.tall = { of: dealOf(s), rows: need(step) };
     const ch = Math.round(cw * 1.4);
     const left = Math.round((W - (cols * cw + (cols - 1) * gap)) / 2);
     const x = Array.from({ length: cols }, (_, i) => left + i * (cw + gap));
-    const m = { W, H, pad, gap, cw, ch, top: pad, tabY: pad + ch + rowGap, x, spot: {}, kind: {}, dir: {}, order: {}, step, layoutKey: layoutKey(s, this.left, step) };
+    const m = { W, H, pad, gap, cw, ch, top: pad, tabY: pad + ch + rowGap, x, spot: {}, kind: {}, dir: {}, order: {}, step, layoutKey: this.layoutKey(s, step) };
     L.top.forEach((p, i) => { m.spot[p.id] = x[p.col]; m.kind[p.id] = p.kind; m.dir[p.id] = p.dir || 1; m.order[p.id] = i; });
     L.tableau.forEach((id, i) => { m.spot[id] = x[i]; m.kind[id] = 'column'; m.order[id] = 100 + i; });
     m.piles = [...L.top.map(p => p.id), ...L.tableau];
@@ -109,6 +120,17 @@ export class Table {
     st.setProperty('--ch', ch + 'px');
     st.setProperty('--r', Math.max(3, Math.round(cw * 0.08)) + 'px');
   }
+
+  // How many card heights tall the table needs to be for this state (see rowsFor()), or for the longest column the deal
+  // has had so far at this size of table, if that was longer.
+  rowsNeeded(s, L, step) {
+    const rows = rowsFor(s, L, step), of = dealOf(s);
+    return of && this.tall?.of === of ? Math.max(rows, this.tall.rows) : rows;
+  }
+
+  // What the layout depends on, besides the size of the table: `step` is how far apart face-up cards can go at the size
+  // the cards are now.
+  layoutKey(s, step) { return `${s.v}:${this.left ? 'L' : 'R'}:${this.rowsNeeded(s, gameOf(s).layout(s, this.left), step)}`; }
 
   // Where every card goes for this state.
   place(s) {
@@ -170,7 +192,7 @@ export class Table {
     if (s !== this.state) { this.clearHint(); this.unflag(); this.showAll = false; }
     this.state = s;
     if (first) this.setup(s);
-    if (!this.m || this.m.layoutKey !== layoutKey(s, this.left, this.m.step)) this.layout();
+    if (!this.m || this.m.layoutKey !== this.layoutKey(s, this.m.step)) this.layout();
     const at = this.place(s), m = this.m;
     if (opts.still || (first && !opts.deal)) this.el.classList.add('still');
 
@@ -585,9 +607,9 @@ function rowsFor(s, L, up) {
   return Math.max(L.rows || 4.9, Math.ceil((1 + col) * 2) / 2);
 }
 
-// What the layout depends on, besides the size of the table: `step` is how far apart face-up cards can go at the size
-// the cards are now.
-const layoutKey = (s, left, step) => `${s.v}:${left ? 'L' : 'R'}:${rowsFor(s, gameOf(s).layout(s, left), step)}`;
+// Which deal a state is, for keeping the cards one size through it: the way of playing and the deal number. Back at the
+// deal as dealt (a fresh one, the same one started again, or Undo all the way back) starts afresh too.
+const dealOf = s => (s.moves ? `${s.v}:${s.deal}` : null);
 
 // Set an attribute only when it changes (null: take it away), so a screen reader hears nothing new for a table that isn't.
 function attr(el, name, value) {
