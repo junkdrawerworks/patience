@@ -347,6 +347,14 @@ for (const colorScheme of ['light', 'dark']) {
     return (lum(fg) + 0.05) / (lum(bg) + 0.05);
   });
   assert.ok(ratio >= 4.5, `the header text is ${ratio.toFixed(2)}:1 on the ${colorScheme} felt`);
+  // And the red of hearts and diamonds on a card, for the small rank in its corner.
+  const red = await page.evaluate(() => {
+    const css = getComputedStyle(document.documentElement), rgb = v => [1, 3, 5].map(i => parseInt(css.getPropertyValue(v).trim().slice(i, i + 2), 16));
+    const lum = c => c.map(v => (v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const [a, b] = [lum(rgb('--card')), lum(rgb('--red'))];
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
+  assert.ok(red >= 4.5, `red is ${red.toFixed(2)}:1 on a ${colorScheme} card`);
 }
 await page.emulateMedia({ colorScheme: 'light' });
 
@@ -1642,6 +1650,26 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   });
   assert.deepEqual(look, { back: 'none', spot: 'solid', switch: true });
   await cc.close();
+}
+
+// Asked for more contrast, the empty places stand out from the felt by at least 3:1, in both palettes.
+{
+  for (const colorScheme of ['light', 'dark']) {
+    const cm = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', contrast: 'more', colorScheme });
+    const pm = await cm.newPage();
+    await pm.goto(base);
+    await pm.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+    const ratio = await pm.evaluate(() => {
+      const css = getComputedStyle(document.documentElement), felt = css.getPropertyValue('--felt').trim();
+      const bg = [1, 3, 5].map(i => parseInt(felt.slice(i, i + 2), 16));
+      const [r, g, b, a = 1] = css.getPropertyValue('--slot').match(/[\d.]+/g).map(Number);
+      const fg = [r, g, b].map((v, i) => v * a + bg[i] * (1 - a));
+      const lum = c => c.map(v => (v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+      return (lum(fg) + 0.05) / (lum(bg) + 0.05);
+    });
+    assert.ok(ratio >= 3, `an empty place is ${ratio.toFixed(2)}:1 on the ${colorScheme} felt`);
+    await cm.close();
+  }
 }
 
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.

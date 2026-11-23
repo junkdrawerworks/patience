@@ -52,7 +52,7 @@
     --bar: rgba(0, 0, 0, 0.26);
     --card: #e9e4d7;
     --card-edge: rgba(0, 0, 0, 0.4);
-    --red: #bb3a33;
+    --red: #b5342e; /* 4.7:1 on the card, for the small corner index */
     --black: #1a1d20;
     --back: #7f2925;
     --back-line: rgba(255, 230, 200, 0.16);
@@ -71,6 +71,16 @@
 :root[data-four] { --club: #18763a; --diamond: #2559bd; }
 @media (prefers-color-scheme: dark) {
   :root[data-four] { --club: #1d7a40; --diamond: #2f5fb8; }
+}
+
+/* Asked for more contrast: the empty places and the deck's turn-over arrow stand out from the felt by 3:1 or more
+   (WCAG 2.1, 1.4.11, for the parts of a picture needed to use it), and the line at the top is at full strength. */
+@media (prefers-contrast: more) {
+  :root { --slot: rgba(255, 255, 255, 0.55); --on-felt-muted: var(--on-felt); }
+  .spot[data-kind='stock'], .spot[data-kind='deals'] { color: var(--on-felt); }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root { --slot: rgba(255, 255, 255, 0.4); }
 }
 
 * { box-sizing: border-box; }
