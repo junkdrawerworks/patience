@@ -16,9 +16,21 @@ const emptyFC = () => ({ v: 'fc', deal: 0, tab: Array.from({ length: 8 }, () => 
 // ---- FreeCell ----
 
 test('FreeCell deals match the numbered deals from Windows', () => {
-  const first = s => s.tab.map(t => name(t[0])).join(' ');
-  assert.equal(first(freecell.deal(1)), 'JD 2D 9H JC 5D 7H 7C 5H');
-  assert.equal(first(freecell.deal(617)), '7D AD 5C 3S 5S 8C 2D AH');
+  // Row by row, as dealt across the eight columns. Games 1 and 617 are the examples in Rosetta Code's task "Deal cards
+  // for FreeCell"; 24 and 11982 (the one that can't be won) come from the same Microsoft shuffle, worked out separately
+  // from the steps that task gives. The shuffle must never change: old deal numbers and saved games would change with it.
+  const rows = s => Array.from({ length: 7 }, (_, r) => s.tab.map(t => (t[r] === undefined ? '' : name(t[r]))).join(' ').trim());
+  const layouts = {
+    1: ['JD 2D 9H JC 5D 7H 7C 5H', 'KD KC 9S 5S AD QC KH 3H', '2S KS 9D QD JS AS AH 3C', '4C 5C TS QH 4H AC 4D 7S',
+      '3S TD 4S TH 8H 2C JH 7D', '6D 8S 8D QS 6C 3D 8C TC', '6S 9C 2H 6H'],
+    24: ['4C 5H QC 5D 2D 7H AH 7S', '2C QH 9S 2S KD JS 5S 6C', '9C 3C 6H JC TH KH 6S 7D', '8C AC 9H 5C TC TS AD 4D',
+      'QS 3H 3S JH TD KC 8H 8S', '4S 4H KS 6D 8D 7C JD 9D', '2H QD 3D AS'],
+    617: ['7D AD 5C 3S 5S 8C 2D AH', 'TD 7S QD AC 6D 8H AS KH', 'TH QC 3H 9D 6S 8D 3D TC', 'KD 5H 9S 3C 8S 7H 4D JS',
+      '4C QS 9C 9H 7C 6H 2C 2S', '4S TS 2H 5D JC 6C JH QH', 'JD KS KC 4H'],
+    11982: ['AH AS 4H AC 2D 6S TS JS', '3D 3H QS QC 8S 7H AD KS', 'KD 6H 5S 4D 9H JH 9S 3C', 'JC 5D 5C 8C 9D TD KH 7C',
+      '6C 2C TH QH 6D TC 4S 7S', 'JD 7D 8H 9C 2H QD 4C 5H', 'KC 8D 2S 3S'],
+  };
+  for (const [n, layout] of Object.entries(layouts)) assert.deepEqual(rows(freecell.deal(+n)), layout, `game ${n}`);
   const s = freecell.deal(617);
   assert.deepEqual(s.tab.map(t => t.length), [7, 7, 7, 7, 6, 6, 6, 6]);
   assert.equal(new Set(s.tab.flat()).size, 52);
