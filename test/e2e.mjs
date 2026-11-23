@@ -174,6 +174,13 @@ assert.equal(back.deal, s.deal);
 assert.deepEqual(back.tab, s.tab);
 assert.equal(await page.isDisabled('#b-undo'), false, 'undo survives a reload');
 
+// Each setting's name is its bold line, with the rest as its description, and the record's list says what it's for.
+await page.click('#b-menu');
+assert.equal(await page.getByRole('checkbox', { name: 'Send cards up by themselves', exact: true }).count(), 1, 'a setting named by its bold line');
+assert.equal(await page.getAttribute('#o-auto', 'aria-describedby').then(id => page.textContent('#' + id)), 'Once nothing on the table could still need a card, it goes to its foundation. In Klondike and FreeCell; Spider always clears a finished run by itself.');
+assert.equal(await page.getByRole('combobox', { name: 'Your record for', exact: true }).count(), 1);
+await page.click('#sheet-menu .close');
+
 // Settings stick.
 await page.click('#b-menu');
 await page.click('label:has(#o-four)');
@@ -239,9 +246,10 @@ const peeks = await page.evaluate(() => window.patience.state.tab.flatMap(t => t
 })));
 assert.equal(peeks.length, 6);
 assert.ok(peeks.every(d => d <= 0), `a frame shows ${Math.max(...peeks).toFixed(1)}px under the next card`);
-// New game opens on the game being played, so Enter deals another of the same.
+// New game opens on the game being played, so Enter deals another of the same, and says it's the one being played.
 await page.keyboard.press('n');
 assert.equal(await page.evaluate(() => document.activeElement.dataset.v), 'fc', 'FreeCell has focus');
+assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('[aria-current]')].map(b => [b.dataset.v, b.getAttribute('aria-current')])), [['fc', 'true']]);
 await page.keyboard.press('Escape');
 // In deal 617 the 4 of hearts on top of the fourth column has nowhere to go but a free cell.
 s = await state();
@@ -1304,6 +1312,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   const told = async (text, why) => {
     await p18.waitForSelector('#toast:not([hidden])', { timeout: 5000 });
     assert.equal(await p18.textContent('#toast'), text + 'UndoNew game', why);
+    // Only the words are read out as the message shows, not the buttons after them.
+    assert.equal(await p18.textContent('#toast [role="status"]'), text);
   };
   const fc = { v: 'fc', deal: 3001, moves: 1500, cells: [28, 51, 7, 27], found: [[39, 40, 41, 42, 43, 44, 45, 46], [], [], []],
     tab: [[15, 30, 16, 0, 5, 13, 38, 24, 10, 22, 34], [21, 1, 37, 49, 9], [17, 47, 48, 8, 20, 32], [33, 19, 31], [50, 29, 6, 18, 4],

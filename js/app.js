@@ -567,7 +567,11 @@ function openNew() {
   $('new-note').hidden = !inPlay();
   $('b-restart').hidden = !game || !game.moves;
   $('b-keep').textContent = game && over() ? 'Close' : 'Keep playing'; // a game won is over, so there's no playing on
-  document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('current', b.dataset.v === (game?.v || settings.variant)));
+  document.querySelectorAll('[data-v]').forEach(b => {
+    const now = b.dataset.v === (game?.v || settings.variant);
+    b.classList.toggle('current', now);
+    if (now) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+  });
   openSheet('sheet-new');
 }
 
@@ -607,14 +611,13 @@ let toastTimer = 0;
 let noting = false; // the message showing is Hint's note on the card it's drawing for
 let drawingFor = null; // and that card
 // A message, with buttons that do something and close it. It goes after `ms` (none: until something else closes it).
+// Only the words are read out as it shows (they're a role="status"), not the buttons after them.
 function toast(text, actions = [], ms = actions.length ? 9000 : 4000) {
   const t = $('toast');
   noting = false;
   drawingFor = null;
-  t.textContent = '';
-  const words = document.createElement('span');
-  words.textContent = text;
-  t.append(words);
+  t.querySelector('.acts')?.remove();
+  $('toast-words').textContent = text;
   // The buttons stay together, and go onto a line of their own together when there isn't room beside the words.
   if (actions.length) {
     const acts = document.createElement('span');

@@ -40,7 +40,7 @@
     </nav>
   </div>
 
-  <div class="toast" id="toast" role="status" hidden></div>
+  <div class="toast" id="toast" hidden><span id="toast-words" role="status"></span></div>
   <p class="said" id="said" aria-live="polite"></p>
 
   <div class="sheet" id="sheet-new" hidden>
@@ -81,7 +81,7 @@
       </div>
 
       <h3><label for="stats-for">Your record</label></h3>
-      <select id="stats-for" class="select">
+      <select id="stats-for" class="select" aria-label="Your record for">
         <option value="k1">Klondike, draw one</option>
         <option value="k3">Klondike, draw three</option>
         <option value="fc">FreeCell</option>
@@ -93,11 +93,11 @@
       <p class="note" id="unkept" hidden>This browser isn't keeping your games, so your record won't be here next time.</p>
 
       <h3>Settings</h3>
-      <label class="toggle"><input type="checkbox" id="o-winnable"><span><b>Only deal games that can be won</b> Each deal is played out first, so there's always a way through.</span></label>
-      <label class="toggle"><input type="checkbox" id="o-auto"><span><b>Send cards up by themselves</b> Once nothing on the table could still need a card, it goes to its foundation. In Klondike and FreeCell; Spider always clears a finished run by itself.</span></label>
+      <label class="toggle"><input type="checkbox" id="o-winnable" aria-labelledby="o-winnable-name" aria-describedby="o-winnable-says"><span><b id="o-winnable-name">Only deal games that can be won</b> <span id="o-winnable-says">Each deal is played out first, so there's always a way through.</span></span></label>
+      <label class="toggle"><input type="checkbox" id="o-auto" aria-labelledby="o-auto-name" aria-describedby="o-auto-says"><span><b id="o-auto-name">Send cards up by themselves</b> <span id="o-auto-says">Once nothing on the table could still need a card, it goes to its foundation. In Klondike and FreeCell; Spider always clears a finished run by itself.</span></span></label>
       <label class="toggle"><input type="checkbox" id="o-clock"><span><b>Show time and moves</b></span></label>
-      <label class="toggle"><input type="checkbox" id="o-four"><span><b>Four-colour suits</b> Clubs green and diamonds blue, so all four suits look different.</span></label>
-      <label class="toggle"><input type="checkbox" id="o-left"><span><b>Stock on the left</b> In Klondike and Spider the deck sits on the right, under your thumb, unless you'd rather have it here.</span></label>
+      <label class="toggle"><input type="checkbox" id="o-four" aria-labelledby="o-four-name" aria-describedby="o-four-says"><span><b id="o-four-name">Four-colour suits</b> <span id="o-four-says">Clubs green and diamonds blue, so all four suits look different.</span></span></label>
+      <label class="toggle"><input type="checkbox" id="o-left" aria-labelledby="o-left-name" aria-describedby="o-left-says"><span><b id="o-left-name">Stock on the left</b> <span id="o-left-says">In Klondike and Spider the deck sits on the right, under your thumb, unless you'd rather have it here.</span></span></label>
 
       <h3>How to play</h3>
       <div class="howto">
