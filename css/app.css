@@ -156,6 +156,9 @@ button { font: inherit; color: inherit; }
 /* The table takes the keyboard's Space and Enter (app.js); a ring says so when Tab or Escape brought focus here
    (.keyed), not when a click did and a key was pressed after it. */
 .table:focus { outline: none; }
+/* Faded while a new deal is being shuffled, so the game being left doesn't look as if it can still be played. */
+.table { transition: opacity 0.2s ease; }
+.table.busy { opacity: 0.45; }
 .table.keyed:focus-visible { outline: 2px solid var(--glow); outline-offset: -4px; border-radius: 10px; }
 /* Said in the middle of the felt while the first deal is still being shuffled. */
 .wait {

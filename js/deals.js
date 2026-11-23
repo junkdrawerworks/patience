@@ -2,7 +2,7 @@
 // search a slice at a time between frames, so the cards keep moving while it thinks.
 
 import { VARIANTS, gameOf } from './games/index.js';
-import { FOUR_SUIT_DEALS } from './games/spider-deals.js';
+import { READY_DEALS } from './games/ready-deals.js';
 import { shuffle } from './rng.js';
 
 // Run a search in slices of a few milliseconds. Resolves with the search once it knows,
@@ -59,19 +59,19 @@ export class Dealer {
   }
 
   // What the save keeps: the deal ready for each way of playing (k1: 123456, ...), in `ways` the way through each,
-  // so Hint's first press on it needn't search again after the page is closed and opened, and in `s4list` the
-  // four-suit deals checked in advance still to come (see take()).
+  // so Hint's first press on it needn't search again after the page is closed and opened, and in `lists` the deals
+  // checked in advance still to come for each way (see take()).
   kept() {
     const ways = {};
     for (const [v, n] of Object.entries(this.ready)) {
       const path = this.ways.get(v + ':' + n);
       if (path) ways[v] = path;
     }
-    return { ...this.ready, ways, s4list: this.s4list };
+    return { ...this.ready, ways, lists: this.lists };
   }
 
   // Take up what the save kept (this page's, or another tab's), leaving out anything of the wrong shape. The first
-  // version kept the deal by draw count.
+  // version kept the deal by draw count, and one after that kept only four-suit Spider's list, as s4list.
   load(next) {
     const kept = { k1: next?.[1], k3: next?.[3], ...next };
     this.ready = Object.fromEntries(Object.keys(VARIANTS).filter(v => Number.isInteger(kept[v]) && kept[v] > 0).map(v => [v, kept[v]]));
@@ -79,8 +79,11 @@ export class Dealer {
       const path = isObj(kept.ways) && kept.ways[v];
       if (Array.isArray(path) && path.every(isObj)) this.ways.set(v + ':' + n, path);
     }
-    const list = Array.isArray(next?.s4list) ? next.s4list.filter(n => FOUR_SUIT_DEALS.includes(n)) : [];
-    this.s4list = [...new Set(list)];
+    const lists = { s4: kept.s4list, ...(isObj(kept.lists) ? kept.lists : {}) };
+    this.lists = Object.fromEntries(Object.keys(VARIANTS).map(v => {
+      const list = Array.isArray(lists[v]) ? lists[v].filter(n => READY_DEALS[v].includes(n)) : [];
+      return [v, [...new Set(list)]];
+    }));
   }
 
   // The way through a deal this Dealer found, found with cards going up by themselves on, once: after that it's Hint's.
@@ -105,19 +108,22 @@ export class Dealer {
   }
 
   // A deal number for a new game. Takes the one that's ready if there is one, and starts on the next.
-  // Four-suit Spider deals can take a while to check, so until one is ready it uses one checked in advance: the next
-  // in a shuffled order of the list, so none comes round again until every one has been dealt (and then not straight
-  // after itself).
+  // Until one is ready (the first game of each way, and the first time it's opened), it uses one checked in advance
+  // instead of waiting while deals are tried: the next in a shuffled order of that way's list, so none comes round
+  // again until every one has been dealt (and then not straight after itself). A deal being found in the background
+  // carries on, for next time.
   async take(v) {
     let n = this.ready[v];
+    const list = READY_DEALS[v];
     if (n) {
       delete this.ready[v];
-    } else if (v === 's4' && FOUR_SUIT_DEALS.length) {
-      if (!this.s4list.length) this.s4list = shuffle(FOUR_SUIT_DEALS.slice(), Math.random() * 2 ** 32);
-      n = this.s4list.shift();
-      if (!this.s4list.length) { // round again, in a new order that doesn't start with this one
-        this.s4list = shuffle(FOUR_SUIT_DEALS.slice(), Math.random() * 2 ** 32);
-        if (this.s4list.length > 1 && this.s4list[0] === n) this.s4list.push(this.s4list.shift());
+    } else if (list.length) {
+      const order = () => shuffle(list.slice(), Math.random() * 2 ** 32);
+      if (!this.lists[v].length) this.lists[v] = order();
+      n = this.lists[v].shift();
+      if (!this.lists[v].length) { // round again, in a new order that doesn't start with this one
+        this.lists[v] = order();
+        if (this.lists[v].length > 1 && this.lists[v][0] === n) this.lists[v].push(this.lists[v].shift());
       }
     } else if (this.jobs[v]) {
       const job = this.jobs[v];

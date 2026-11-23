@@ -241,7 +241,10 @@ async function newGame(v, number) {
     $('status').textContent = line;
     say(line);
     // With no game on the table yet (the first time it's opened), the felt says so too, so it doesn't look broken.
-    if (!game) { $('wait').textContent = line; $('wait').hidden = false; }
+    // With one, it fades and its clock stops, and Hint and Undo go off, so it doesn't look as if it can still be played.
+    if (!game) { $('wait').textContent = line; $('wait').hidden = false; return; }
+    stopClock();
+    busy(true);
   }, 250);
   const n = number ?? (settings.winnable ? await dealer.take(v) : g.randomDeal());
   if (ticket !== dealing) return; // another game was chosen while this one was being shuffled
@@ -265,9 +268,17 @@ function restart() {
   start(G().deal(game.deal, game.v), true);
 }
 
+// The table faded, and Hint and Undo off, while a new deal is being shuffled (see newGame).
+function busy(on) {
+  table.el.classList.toggle('busy', on);
+  $('b-hint').disabled = on;
+  if (on) $('b-undo').disabled = true;
+}
+
 function start(state, again) {
   cancelChain();
   clearTimeout(landed);
+  busy(false);
   game = state;
   history = [];
   news = null;

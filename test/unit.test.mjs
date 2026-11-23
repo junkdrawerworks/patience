@@ -5,7 +5,8 @@ import { card, safeUp, stacks, fits, suitOf } from '../js/cards.js';
 import { deal, draw, move, canDrop, bestTarget, autoStep, won, finishable, finishStep, forSolver, fromSolver, easyHint, foundationFor, foundCounts, outOfMoves, deadEnd, TABLEAU, FOUNDATIONS } from '../js/games/klondike.js';
 import { solve, Search } from '../js/solvers/klondike.js';
 import { hintFor, Dealer } from '../js/deals.js';
-import { FOUR_SUIT_DEALS } from '../js/games/spider-deals.js';
+import { READY_DEALS } from '../js/games/ready-deals.js';
+import { VARIANTS } from '../js/games/index.js';
 
 const S = 0, H = 1, C = 2, D = 3;
 const top = a => a[a.length - 1];
@@ -306,19 +307,47 @@ test('a king with cards under it can still move to an empty column', () => {
   assert.equal(solve(forSolver(s)).result, 'won');
 });
 
-test('four-suit Spider deals from the list checked in advance come round once each, kept in the save', async () => {
-  // With no checked deal ready, every New game takes one from the list. The page closes and opens part way through.
-  let dealer = new Dealer({});
-  dealer.prepare = () => {}; // no deal found in the background
-  const dealt = [];
-  for (let i = 0; i < FOUR_SUIT_DEALS.length; i++) {
-    if (i === 40) { dealer = new Dealer(JSON.parse(JSON.stringify(dealer.kept()))); dealer.prepare = () => {}; }
-    dealt.push(await dealer.take('s4'));
+test('deals from the lists checked in advance come round once each, for every way of playing, kept in the save', async () => {
+  // With no checked deal ready, every New game takes one from its way's list. The page closes and opens part way through.
+  for (const v of Object.keys(VARIANTS)) {
+    const list = READY_DEALS[v];
+    assert.ok(list.length >= 40, `${v}: ${list.length} deals listed`);
+    assert.equal(new Set(list).size, list.length, `${v}: none listed twice`);
+    let dealer = new Dealer({});
+    dealer.prepare = () => {}; // no deal found in the background
+    const dealt = [];
+    for (let i = 0; i < list.length; i++) {
+      if (i === 20) { dealer = new Dealer(JSON.parse(JSON.stringify(dealer.kept()))); dealer.prepare = () => {}; }
+      dealt.push(await dealer.take(v));
+    }
+    assert.equal(new Set(dealt).size, list.length, `${v}: none twice`);
+    assert.ok(dealt.every(n => list.includes(n)), v);
+    const next = await dealer.take(v);
+    assert.ok(list.includes(next) && next !== dealt.at(-1), `${v}: then round again, not starting with the last one`);
   }
-  assert.equal(new Set(dealt).size, FOUR_SUIT_DEALS.length, 'none twice');
-  assert.ok(dealt.every(n => FOUR_SUIT_DEALS.includes(n)));
-  const next = await dealer.take('s4');
-  assert.ok(FOUR_SUIT_DEALS.includes(next) && next !== dealt.at(-1), 'then round again, not starting with the last one');
+});
+
+test('a deal from the list comes at once while one is still being found, and the one found is kept for next time', async () => {
+  const dealer = new Dealer({});
+  let found;
+  dealer.find = () => new Promise(resolve => { found = resolve; });
+  const first = await dealer.take('k3');
+  assert.ok(READY_DEALS.k3.includes(first), 'from the list, without waiting');
+  const second = await dealer.take('k3');
+  assert.ok(READY_DEALS.k3.includes(second) && second !== first, 'still from the list while the search goes on');
+  found(4242);
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(await dealer.take('k3'), 4242, 'then the one found');
+});
+
+test('a save from before every way had a list still keeps the four-suit order, and anything of the wrong shape is left out', () => {
+  const order = READY_DEALS.s4.slice(5, 9);
+  assert.deepEqual(new Dealer({ s4list: order }).kept().lists.s4, order);
+  const lists = new Dealer({ lists: { k1: [READY_DEALS.k1[0], 7, READY_DEALS.k1[0], 'x'], fc: 'no', s2: null } }).kept().lists;
+  assert.deepEqual(lists.k1, [READY_DEALS.k1[0]], 'only listed deals, once each');
+  assert.deepEqual(lists.fc, []);
+  assert.deepEqual(lists.s2, []);
+  for (const bad of [null, 5, 'x', [], { lists: 3 }, { lists: [1, 2] }, { s4list: { a: 1 } }]) assert.doesNotThrow(() => new Dealer(bad).kept(), JSON.stringify(bad));
 });
 
 test('the line a screen reader reads after a move says what moved, what turned over and what cleared away', async () => {

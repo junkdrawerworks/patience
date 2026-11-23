@@ -24,7 +24,7 @@
 - **Spider, with one, two or four suits.** Two decks in ten columns. Build down in any suit, but only a run of one suit moves together, and a run from king to ace of one suit clears away. Tap the deck to deal a row, once every column has a card. Clear all eight runs to win.
 - **Tap or drag.** A tap sends cards to the best place: up to a foundation if they can go, otherwise onto a column (in FreeCell, a free cell if nothing else fits; in Spider, a card of the same suit first, and a card in a run of its own suit only onto another card of that suit). Hint lights up a card and where it goes: tap either one and the move is played. Drag a card, or a run, anywhere the rules allow, and the place it would land lights up softly as you hold it there; drop it somewhere it doesn't fit and it slides back.
 - **Undo all the way back,** even after closing the page and coming back to it.
-- **Deals that can be won.** Before a deal reaches you, a solver plays it through, seeing every face-down card, and any deal it can't win in time is shuffled away. Four-suit Spider is slow to check, so the first one comes from a list of deals already checked while the next is found in the background. Turn this off in the menu if you'd rather take your chances.
+- **Deals that can be won.** Before a deal reaches you, a solver plays it through, seeing every face-down card, and any deal it can't win in time is shuffled away. So you never wait for one, the first game of each way of playing comes from a list of deals already checked, and the next is found in the background while you play. Turn this off in the menu if you'd rather take your chances.
 - **A hint that knows the way.** Hint asks the same solver for the next move from where you are, and while you do what it says, it keeps to the way it found, even when you try something else, ask it there, and undo back. When it's drawing for a card further down the deck, it says which one. If an earlier move has left no way to win, it says so, and Undo takes you back to try another. And once no move you could make would ever help, the game says so without being asked.
 - **Cards go up by themselves** in Klondike and FreeCell once nothing on the table could still need them, and when the rest is in order the game finishes itself. You can switch the first part off.
 - **The bouncing cards** when you win, as tradition requires.
@@ -47,7 +47,7 @@ npm run build                     # bundles everything into dist/patience.html, 
 node dev/solver-check.mjs 200 3   # solves 200 Klondike deals drawing three, and replays every win through the rules
 node dev/freecell-check.mjs 100   # the same for FreeCell, checking every move by its own rules
 node dev/spider-check.mjs s2 30   # the same for Spider with two suits (s1, s2 or s4)
-node dev/spider-deals.mjs 120     # rewrites the list of four-suit Spider deals checked in advance
+node dev/ready-deals.mjs k3 50    # rewrites the list of deals checked in advance for one way of playing (--check checks them all)
 node dev/hint-check.mjs k3 50     # plays 50 deals doing just what Hint says, and lists any it doesn't win
 ```
 
@@ -55,7 +55,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 
 ### Files
 
-- `js/games/`: the rules of each game, all with the same parts so the rest of the app doesn't need to know which is being played (`index.js` lists them and what each part does). `spider-deals.js` is the list of four-suit Spider deals checked in advance.
+- `js/games/`: the rules of each game, all with the same parts so the rest of the app doesn't need to know which is being played (`index.js` lists them and what each part does). `ready-deals.js` is the list of deals checked in advance for each way of playing, so the first game of each needn't wait.
 - `js/solvers/klondike.js`: the Klondike solver. A depth-first search that sees the face-down cards, offers every card the stock can reach as a move of its own, and never looks at the same position twice. Drawing three, it allows for a card going up by itself from the waste, which changes what later draws turn over, so a deal it hands out can be won with that setting on or off. To be quick it leaves out moves that seldom help, like moving part of a run or taking a card back down, so before Hint says a game can't be won, or the game says there are no moves left, it looks again with every move. In the 100,000 positions it gets to check a deal before it reaches you, it wins about 79% of deals drawing one and 68% drawing three.
 - `js/solvers/best-first.js`: a best-first search shared by the FreeCell and Spider solvers, which always looks next at the most promising position found so far.
 - `js/solvers/freecell.js`: the FreeCell solver. In the 100,000 positions it gets to check a deal before it reaches you, it wins 98 of the first 100 Windows deals in about a tenth of a second each (99 in the 200,000 Hint gets), and proves game 11982, the famous one, can't be won.

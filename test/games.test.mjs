@@ -6,7 +6,7 @@ import { card, suitOf, rankOf } from '../js/cards.js';
 import { freecell, room } from '../js/games/freecell.js';
 import { spider } from '../js/games/spider.js';
 import { VARIANTS } from '../js/games/index.js';
-import { FOUR_SUIT_DEALS } from '../js/games/spider-deals.js';
+import { READY_DEALS } from '../js/games/ready-deals.js';
 import { hintFor, primeLine, Dealer, deadEnd } from '../js/deals.js';
 
 const S = 0, H = 1, C = 2, D = 3;
@@ -354,9 +354,14 @@ test('Hint on a won Spider table has nothing to suggest, rather than failing', a
   assert.deepEqual(await hintFor(s), { none: true });
 });
 
-test('the four-suit deals checked in advance really are won by the solver', () => {
-  assert.ok(FOUR_SUIT_DEALS.length >= 100);
-  for (const n of FOUR_SUIT_DEALS.slice(0, 3)) assert.equal(spider.search(spider.deal(n, 's4')).run(spider.budget.deal), 'won', `deal ${n}`);
+test('the deals checked in advance really are won by the solver', () => {
+  // Every Klondike and FreeCell deal listed, and a spread of the Spider ones, which take longer to check (all 60 or so
+  // seconds of them: node dev/ready-deals.mjs --check).
+  const every = { k1: 1, k3: 1, fc: 1, s1: 5, s2: 5, s4: 36 };
+  for (const [v, list] of Object.entries(READY_DEALS)) {
+    const game = VARIANTS[v].game;
+    for (const n of list.filter((_, i) => i % every[v] === 0)) assert.equal(game.search(game.deal(n, v)).run(game.budget.deal), 'won', `${v} deal ${n}`);
+  }
 });
 
 test('Hint gets at least as long as a deal was checked for, so its first press on a new deal knows the way', () => {

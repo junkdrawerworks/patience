@@ -1896,23 +1896,64 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ca.close();
 }
 
-// Opened for the first time, while the first deal is still being shuffled, the felt says so in the middle, not just
-// the line at the top, and Undo is dimmed. Drawing three, with the random numbers fixed so that the first few deals
-// tried can't be won, it takes a few seconds to find one.
+// Opened for the first time, the first deal is on the table at once, from the list of deals checked in advance, and so
+// is the first game of every other way of playing picked from the New sheet: no "Shuffling" line, ever. The random
+// numbers are fixed so that the first few deals tried can't be won, which took a few seconds drawing three.
+{
+  const { READY_DEALS } = await import('../js/games/ready-deals.js');
+  const cf = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  const pf = await cf.newPage();
+  const errors = [];
+  pf.on('pageerror', e => errors.push(e.message));
+  await pf.addInitScript(() => {
+    localStorage.setItem('patience.v1', JSON.stringify({ settings: { variant: 'k3', winnable: true, auto: true, clock: true, four: false, left: false } }));
+    let x = 6;
+    Math.random = () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648;
+    window.shuffled = 0; // how many times the top line said a deal was being shuffled
+    addEventListener('DOMContentLoaded', () => new MutationObserver(() => {
+      if (/Shuffling/.test(document.getElementById('status').textContent)) window.shuffled++;
+    }).observe(document.getElementById('status'), { childList: true, characterData: true, subtree: true }));
+  });
+  await pf.goto(base);
+  const landed = () => pf.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await landed();
+  for (const v of ['k3', 'k1', 'fc', 's1', 's2', 's4']) {
+    if (v !== 'k3') {
+      await pf.click('#b-new');
+      await pf.click(`.choice[data-v="${v}"]`);
+      await pf.waitForFunction(v => window.patience.state.v === v, v, { timeout: 5000 });
+      await landed();
+    }
+    const st = await pf.evaluate(() => window.patience.state);
+    assert.ok(READY_DEALS[v].includes(st.deal), `${v}: deal ${st.deal} is from the list`);
+    assert.equal(await pf.evaluate(() => window.shuffled), 0, `${v}: dealt without shuffling`);
+  }
+  assert.deepEqual(errors, [], 'errors on a first open');
+  await cf.close();
+}
+
+// With no deal checked in advance (the lists emptied here), the first open waits while deals are tried, and while it
+// does the felt says so in the middle, not just the line at the top, and Undo is dimmed. Later, leaving a game for a
+// deal that takes a while to find, the table being left fades and its clock stops, and Hint and Undo go off, until the
+// new deal is here. Drawing three with the random numbers fixed so the first few deals tried can't be won; then drawing
+// one with deals 1, 6, 11 and 19 tried first, which use up the solver's whole limit without being won.
 {
   const cw = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  await cw.route('**/js/games/ready-deals.js', r => r.fulfill({ contentType: 'text/javascript', body: 'export const READY_DEALS = { k1: [], k3: [], fc: [], s1: [], s2: [], s4: [] };' }));
   const pw1 = await cw.newPage();
   const errors = [];
   pw1.on('pageerror', e => errors.push(e.message));
   await pw1.addInitScript(() => {
     localStorage.setItem('patience.v1', JSON.stringify({ settings: { variant: 'k3', winnable: true, auto: true, clock: true, four: false, left: false } }));
     let x = 6;
-    Math.random = () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648;
+    window.queued = []; // random numbers to give out first
+    Math.random = () => (window.queued.length ? window.queued.shift() : (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648);
   });
   await pw1.goto(base);
   await pw1.waitForSelector('#wait:not([hidden])', { timeout: 5000 });
   assert.equal(await pw1.textContent('#wait'), 'Shuffling for a deal that can be won…');
   assert.equal(await pw1.isDisabled('#b-undo'), true, 'Undo is dimmed while there is no game');
+  assert.equal(await pw1.evaluate(() => document.getElementById('table').classList.contains('busy')), false, 'the empty felt is not faded');
   const middle = await pw1.evaluate(() => {
     const w = document.getElementById('wait').getBoundingClientRect(), t = document.getElementById('table').getBoundingClientRect();
     return Math.abs((w.top + w.bottom) / 2 - (t.top + t.bottom) / 2) < 2 && Math.abs((w.left + w.right) / 2 - (t.left + t.right) / 2) < 2;
@@ -1921,6 +1962,38 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pw1.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 60000 });
   assert.equal(await pw1.isHidden('#wait'), true, 'gone once the deal is here');
   assert.equal(await pw1.isDisabled('#b-undo'), true, 'and Undo still dimmed on the new deal');
+
+  // A move, so Undo is on and the clock runs.
+  await pw1.click('.spot[data-pile="stock"]', { force: true });
+  await pw1.waitForFunction(() => window.patience.state.moves === 1 && !window.patience.busy);
+  await pw1.waitForTimeout(1100);
+  assert.equal(await pw1.isDisabled('#b-undo'), false);
+  const looks = () => pw1.evaluate(() => ({
+    faded: document.getElementById('table').classList.contains('busy'),
+    opacity: +getComputedStyle(document.getElementById('table')).opacity,
+    hint: document.getElementById('b-hint').disabled, undo: document.getElementById('b-undo').disabled,
+    time: document.getElementById('time').textContent, status: document.getElementById('status').textContent, v: window.patience.state.v,
+  }));
+  // Given out from the click on, so a deal being found in the background meanwhile can't take them.
+  await pw1.evaluate(() => addEventListener('click', e => {
+    if (e.target.closest('.choice[data-v="k1"]')) window.queued = [1, 6, 11, 19, 11705].map(n => (n - 0.5) / 999999);
+  }, true));
+  await pw1.click('#b-new');
+  await pw1.click('.choice[data-v="k1"]');
+  await pw1.waitForFunction(() => document.getElementById('table').classList.contains('busy'), null, { timeout: 5000 });
+  await pw1.waitForTimeout(400);
+  const during = await looks();
+  assert.equal(during.v, 'k3', 'the old game is still on the table');
+  assert.match(during.status, /Shuffling/);
+  assert.ok(during.opacity < 0.6, `faded (${during.opacity})`);
+  assert.ok(during.hint && during.undo, 'Hint and Undo are off');
+  await pw1.waitForTimeout(1100);
+  assert.equal((await looks()).time, during.time, 'its clock has stopped');
+  await pw1.waitForFunction(() => window.patience.state.v === 'k1' && !window.patience.busy, null, { timeout: 60000 });
+  const after = await looks();
+  assert.equal(await pw1.evaluate(() => window.patience.state.deal), 11705, 'the first deal tried that can be won');
+  assert.ok(!after.faded && after.opacity === 1 && !after.hint, 'the new deal is not faded, and Hint is on');
+  assert.ok(after.undo, 'Undo is off on the new deal, with nothing to undo');
   assert.deepEqual(errors, [], 'errors on a first open');
   await cw.close();
 }
