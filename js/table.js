@@ -260,7 +260,14 @@ export class Table {
     el.style.zIndex = 5000 + p.z;
     el.classList.remove('deep');
     el.classList.add('flying');
-    this.flights.set(c, { z: p.z, deep: p.deep, timer: setTimeout(() => this.land(c), ms) });
+    const f = { z: p.z, deep: p.deep };
+    // On a busy phone a move can start a few frames late, so it lands once it has stopped moving, not just on time.
+    const arrived = () => {
+      if (el.getAnimations?.().some(a => a.transitionProperty === 'transform' && a.playState === 'running')) f.timer = setTimeout(arrived, 30);
+      else this.land(c);
+    };
+    f.timer = setTimeout(arrived, ms);
+    this.flights.set(c, f);
   }
 
   land(c) {
