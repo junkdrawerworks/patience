@@ -1473,6 +1473,26 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cr.close();
 }
 
+// Klondike's deck shows its turn-over arrow only while there's something to turn over.
+{
+  const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  const pa = await ca.newPage();
+  await pa.goto(base);
+  await pa.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const arrow = async (stock, waste) => {
+    await pa.evaluate(([stock, waste]) => {
+      const rest = Array.from({ length: 52 }, (_, c) => c).filter(c => ![...stock, ...waste].includes(c));
+      window.patience.load({ v: 'k1', deal: 11705, draw: 1, fan: 0, moves: 30, stock, waste, found: [[], [], [], []],
+        tab: Array.from({ length: 7 }, (_, i) => { const col = rest.filter((c, k) => k % 7 === i); return { down: col.slice(0, -1), up: col.slice(-1) }; }) });
+    }, [stock, waste]);
+    await pa.waitForTimeout(400);
+    return pa.evaluate(() => +getComputedStyle(document.querySelector('.spot[data-pile="stock"] svg')).opacity);
+  };
+  assert.equal(await arrow([], []), 0, 'no arrow with the deck and the waste both empty');
+  assert.equal(await arrow([], [51]), 1, 'the arrow with cards on the waste to turn over');
+  await ca.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
