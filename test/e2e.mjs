@@ -746,6 +746,54 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cp.close();
 }
 
+// Drawing for a card a few draws down the deck, Hint's note and the lit deck stay while the player taps the deck,
+// until that card turns up. Klondike drawing one, deal 52,817: the ace of clubs is the fourth card down.
+{
+  const cd = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const pd = await cd.newPage();
+  const errors = [];
+  pd.on('pageerror', e => errors.push(e.message));
+  const ready = () => pd.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const deckLit = () => pd.evaluate(() => {
+    const s = window.patience.state, top = s.stock.at(-1);
+    return !!document.querySelector(top === undefined ? '.spot[data-pile="stock"].hint' : `.card[data-c="${top}"].hint`);
+  });
+  await pd.goto(base);
+  await ready();
+  await pd.evaluate(() => window.patience.newGame('k1', 52817));
+  await pd.waitForTimeout(1500);
+  await ready();
+  await pd.tap('#b-hint');
+  await pd.waitForSelector('.hint', { timeout: 20000 });
+  assert.equal(await pd.textContent('#toast'), 'Draw for the ace of clubs.');
+  const draw = async () => { await pd.tap('.spot[data-pile="stock"]', { force: true }); await pd.waitForTimeout(400); await ready(); }; // once the card has flown
+  for (let i = 1; i <= 3; i++) {
+    await draw();
+    if (i < 3) {
+      assert.equal(await pd.isHidden('#toast'), false, `the note stays after draw ${i}`);
+      assert.equal(await pd.textContent('#toast'), 'Draw for the ace of clubs.');
+      assert.ok(await deckLit(), `and the deck is lit again after draw ${i}`);
+    }
+  }
+  await pd.waitForTimeout(4500);
+  assert.equal(await pd.isHidden('#toast'), false, 'the note has no time limit while it waits');
+  await draw();
+  assert.equal(await pd.isHidden('#toast'), true, 'the note went once the ace of clubs turned up');
+  assert.ok((await pd.evaluate(() => window.patience.state)).found.some(f => f[0] === 26), 'and it went up by itself');
+  assert.equal(await pd.locator('.hint').count(), 0, 'and nothing is lit');
+  // Doing anything other than drawing ends it.
+  await pd.tap('#b-undo');
+  await ready();
+  await pd.tap('#b-hint');
+  await pd.waitForSelector('.hint', { timeout: 20000 });
+  assert.equal(await pd.textContent('#toast'), 'Draw for the ace of clubs.');
+  await pd.tap('#b-undo');
+  await ready();
+  assert.equal(await pd.isHidden('#toast'), true, 'Undo takes the note away');
+  assert.deepEqual(errors, [], 'errors drawing for a card');
+  await cd.close();
+}
+
 // Swipes near the screen's sides. On Android with gesture navigation a swipe that starts near either side is the
 // phone's Back, and Chrome has its own swipe to go Back or Forward. A swipe sideways is nobody's, so it can't run on
 // into Chrome's: the page doesn't overscroll, and the table takes every touch.

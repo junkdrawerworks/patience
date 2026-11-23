@@ -9,7 +9,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const RECYCLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg>';
 
 export class Table {
-  // handlers: stock(), tap(pile, n), move(pile, n, to) (a drop, or a tap on the card Hint lit up), touched()
+  // handlers: stock(), tap(pile, n), move(pile, n, to) (a drop, or a tap on the card Hint lit up), touched(deck)
   constructor(el, handlers) {
     this.el = el;
     this.on = handlers;
@@ -237,15 +237,15 @@ export class Table {
 
   down(e) {
     if (this.locked || this.drag || !this.state || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    this.on.touched();
     const s = this.state, m = this.m;
     const cardEl = e.target.closest('.card'), spot = e.target.closest('.spot');
     let pile, index;
     if (cardEl) ({ pile, index } = this.at.get(+cardEl.dataset.c));
     else if (spot) { pile = spot.dataset.pile; index = -1; }
-    else return;
+    const kind = pile && m.kind[pile];
+    this.on.touched(kind === 'stock' || kind === 'deals');
+    if (!pile) return;
 
-    const kind = m.kind[pile];
     if (kind === 'stock' || kind === 'deals') { this.on.stock(); return; }
     if (kind === 'sets') return;
     if (kind !== 'column') index = this.game.pile(s, pile).up.length - 1;

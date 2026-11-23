@@ -56,7 +56,7 @@ const G = () => gameOf(game);
 document.body.prepend(suitSprite());
 const table = new Table($('table'), {
   stock: () => {
-    if (act(G().stock(game))) return;
+    if (act(G().stock(game), true)) return;
     const note = G().stockNote(game);
     if (note) toast(note);
   },
@@ -66,7 +66,7 @@ const table = new Table($('table'), {
     if (!to || !act(G().move(game, pile, n, to))) table.shake(pile, n);
   },
   move: (pile, n, to) => { if (!act(G().move(game, pile, n, to))) table.render(game); },
-  touched: () => hideToast(),
+  touched: deck => { if (!(deck && noting)) hideToast(); }, // a tap on the deck may be the draw Hint's note asks for
 });
 // A Back that comes while a card is held, or just after the browser took a touch away from the table (as Android's
 // back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays as it was.
@@ -76,18 +76,30 @@ const dealer = new Dealer(readyOf(saved.next), () => write(), () => !!table.drag
 
 // ---- playing ----
 
-// Make a move the player asked for. Returns false if there was nothing to do.
+// Make a move the player asked for (`drew`: a tap on the deck). Returns false if there was nothing to do.
 // A won game is finished: it can be looked at, but not played on or undone, so it can't be won twice.
-function act(next) {
+function act(next, drew) {
   if (!next || table.locked || over()) return false;
   cancelChain();
   table.clearHint();
-  if (noting) hideToast(); // Hint's note on the card it was drawing for goes with the hint
+  // Hint's note on the card it's drawing for goes with the hint, unless this is a draw and that card isn't up yet:
+  // then the note stays, and the deck lights up again for the next draw.
+  const awaited = noting && drew ? drawingFor : null;
+  if (noting) hideToast();
   history.push(game);
   if (!counted) { counted = true; stats[next.v].played++; }
   startClock();
   set(next);
+  if (awaited !== null && next.waste?.at(-1) !== awaited && !G().won(game)) drawFor(awaited);
   return true;
+}
+
+// Hint is drawing for card c, further down the deck: light up the deck and say which card, until it turns up.
+function drawFor(c) {
+  table.showHint({ stock: true, c });
+  toast(`Draw for the ${shortName(c)}.`, [], 0);
+  noting = true;
+  drawingFor = c;
 }
 
 function set(next) {
@@ -222,9 +234,9 @@ async function hint() {
     return;
   }
   if (h.move) {
-    table.showHint(h.move);
     // Drawing for a card further down the deck, only the deck lights up, so the note says which card.
-    if (h.move.c !== undefined) { toast(`Draw for the ${shortName(h.move.c)}.`); noting = true; }
+    if (h.move.c !== undefined) drawFor(h.move.c);
+    else table.showHint(h.move);
   } else if (h.lost) toast('Looks like there’s no way to win from here. Undo a few moves to try another way.', [['Undo', undo]]);
   else toast('There are no moves left.', [['New game', openNew]]);
 }
@@ -522,9 +534,12 @@ function modal() {
 
 let toastTimer = 0;
 let noting = false; // the message showing is Hint's note on the card it's drawing for
-function toast(text, actions = []) {
+let drawingFor = null; // and that card
+// A message, with buttons that do something and close it. It goes after `ms` (none: until something else closes it).
+function toast(text, actions = [], ms = actions.length ? 9000 : 4000) {
   const t = $('toast');
   noting = false;
+  drawingFor = null;
   t.textContent = text;
   for (const [name, fn] of actions) {
     const b = document.createElement('button');
@@ -535,9 +550,9 @@ function toast(text, actions = []) {
   }
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, actions.length ? 9000 : 4000);
+  if (ms) toastTimer = setTimeout(hideToast, ms);
 }
-function hideToast() { $('toast').hidden = true; clearTimeout(toastTimer); noting = false; }
+function hideToast() { $('toast').hidden = true; clearTimeout(toastTimer); noting = false; drawingFor = null; }
 
 document.addEventListener('keydown', e => {
   if (!$('sheet-new').hidden || !$('sheet-menu').hidden) { if (e.key === 'Escape') closeSheets(); return; }
