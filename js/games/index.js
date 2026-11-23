@@ -7,9 +7,10 @@
 //
 //   deal(n, v)              a new game: deal number n of way v
 //   layout(s, left)         where the piles go: { cols, rows?, split?, top: [{ id, col, kind, label?, dir? }], tableau: [ids],
-//                           dealFrom } (rows: how many card heights a long column needs, for sizing the cards on a short
-//                           screen; split: a top-row column with a faint line before it, setting its piles apart from the
-//                           ones before it, as FreeCell's foundations from its free cells)
+//                           empty?, dealFrom } (rows: how many card heights a long column needs, for sizing the cards on a
+//                           short screen; split: a top-row column with a faint line before it, setting its piles apart from
+//                           the ones before it, as FreeCell's foundations from its free cells; label and empty: a faint
+//                           letter in an empty place, a top-row one's or every column's, for the card that starts it)
 //                           kinds: 'stock' and 'deals' (tap to draw or deal), 'waste', 'stack' (foundations, free cells),
 //                           'sets' (Spider's cleared runs), and 'column' for the tableau
 //   pile(s, id)             the cards in a pile: { down: [...], up: [...] }, bottom to top

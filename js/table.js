@@ -100,7 +100,7 @@ export class Table {
     // The empty places on the table, one per pile. Each is also the pile to a screen reader (see name()), so they come
     // before the cards, in the order they're laid out: the top row, then the columns from the left.
     for (const id of Object.keys(this.spots)) if (!(id in m.spot)) { this.spots[id].remove(); delete this.spots[id]; }
-    for (const p of [...L.top, ...L.tableau.map(id => ({ id, kind: 'column' }))]) {
+    for (const p of [...L.top, ...L.tableau.map(id => ({ id, kind: 'column', label: L.empty }))]) {
       let el = this.spots[p.id];
       if (!el) {
         el = document.createElement('div');

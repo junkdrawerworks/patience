@@ -256,6 +256,7 @@ export const klondike = {
         ? [{ id: 'stock', col: 0, kind: 'stock' }, { id: 'waste', col: 1, kind: 'waste' }, ...found(3)]
         : [...found(0), { id: 'waste', col: s.draw === 3 ? 4 : 5, kind: 'waste' }, { id: 'stock', col: 6, kind: 'stock' }],
       tableau: TABLEAU,
+      empty: 'K', // only a king can go in an empty column
       dealFrom: 'stock',
     };
   },

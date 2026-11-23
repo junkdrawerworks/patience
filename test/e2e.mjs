@@ -2140,6 +2140,19 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   };
   assert.equal(await arrow([], []), 0, 'no arrow with the deck and the waste both empty');
   assert.equal(await arrow([], [51]), 1, 'the arrow with cards on the waste to turn over');
+  // An empty Klondike column has a faint K in it, as only a king can go there; FreeCell's and Spider's take any card.
+  const letters = () => pa.$$eval('.spot[data-kind="column"]', els => els.map(el => el.textContent).join(''));
+  await pa.evaluate(() => window.patience.load({ v: 'k1', deal: 11705, draw: 1, fan: 0, moves: 30, stock: [], waste: [], found: [[], [], [], []],
+    tab: Array.from({ length: 7 }, (_, i) => ({ down: [], up: i ? [] : Array.from({ length: 52 }, (_, c) => c) })) }));
+  await pa.waitForTimeout(300);
+  assert.equal(await letters(), 'KKKKKKK', 'every Klondike column has its K');
+  assert.equal(await pa.isVisible('.spot[data-pile="t6"] span'), true, 'and the K shows in an empty one');
+  for (const v of ['fc', 's2']) {
+    await pa.evaluate(v => window.patience.newGame(v, 5), v);
+    await pa.waitForTimeout(1500);
+    await pa.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+    assert.equal(await letters(), '', `no letter in ${v}'s columns`);
+  }
   await ca.close();
 }
 
