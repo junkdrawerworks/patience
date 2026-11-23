@@ -1240,7 +1240,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     if (path.endsWith('/')) path += 'index.html';
     let body;
     try { body = await readFile(join(root, path)); } catch { res.writeHead(404); res.end(); return; }
-    if (release && path === '/sw.js') body = Buffer.from(String(body).replace(/const FILES = '[0-9a-f]*'/, "const FILES = 'next'"));
+    if (release && path === '/sw.js') body = Buffer.from(String(body).replace(/const FILES = '[0-9a-f]*'/, "const FILES = 'next'").replace(/const CACHE = '[^']*'/, "const CACHE = 'patience-v999'"));
     if (release && path === '/index.html') body = Buffer.concat([body, Buffer.from('<!-- the next release -->\n')]);
     const etag = `"${createHash('sha1').update(body).digest('hex').slice(0, 16)}"`;
     const head = { etag, 'cache-control': 'max-age=600', 'content-type': TYPES[extname(path)] || 'text/html' };
@@ -1290,11 +1290,18 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   for (const [req, res] of held.splice(0)) serve(req, res);
 
   // A new release: every file in the new copy comes from the server, though the browser still has its own copies of
-  // the old ones for ten minutes. (The next release changes index.html, and so FILES in sw.js, as a real one does.)
+  // the old ones for ten minutes. (The next release changes index.html, and so FILES in sw.js, as a real one does; this
+  // one bumps the cache's name too.) The old copies go, and a cache that isn't the app's own is left alone.
+  const before = await page.evaluate(async () => { await caches.open('patience-v1'); await caches.open('someone-else'); return caches.keys(); });
+  assert.ok(before.some(k => /^patience-v[0-9]+$/.test(k) && k !== 'patience-v1'), 'the offline copy is kept in a cache named patience-v and a number');
   release = true;
   await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
   for (const end = Date.now() + 10000; !(await page.evaluate(async () => !!(await (await caches.match('index.html'))?.text())?.includes('<!-- the next release -->')));) {
     assert.ok(Date.now() < end, "the new release's offline copy kept the old index.html");
+    await new Promise(r => setTimeout(r, 100));
+  }
+  for (const end = Date.now() + 10000; (await page.evaluate(() => caches.keys())).sort().join() !== 'patience-v999,someone-else';) {
+    assert.ok(Date.now() < end, `caches after the release: ${await page.evaluate(() => caches.keys())}`);
     await new Promise(r => setTimeout(r, 100));
   }
   assert.deepEqual(problems, [], 'problems while offline or on a stalled connection');
