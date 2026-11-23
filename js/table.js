@@ -167,7 +167,7 @@ export class Table {
     if (opts.deal && calm) { opts = { still: true }; this.dealDuration = 0; }
     const first = !this.state || this.v !== s.v;
     // A hint stays lit until the cards move: drawing the same table again (a new size, the deck moved) keeps it.
-    if (s !== this.state) { this.clearHint(); this.unflag(); }
+    if (s !== this.state) { this.clearHint(); this.unflag(); this.showAll = false; }
     this.state = s;
     if (first) this.setup(s);
     if (!this.m || this.m.layoutKey !== layoutKey(s, this.left, this.m.step)) this.layout();
@@ -556,13 +556,13 @@ export class Table {
   }
 
   hide(c, hidden) { const el = this.cards.get(c); if (el) el.style.visibility = hidden ? 'hidden' : ''; }
-  showAllCards() { this.cards.forEach(el => { el.style.visibility = ''; }); }
+  showAllCards() { this.showAll = false; this.cards.forEach(el => { el.style.visibility = ''; }); }
 
-  // Show every card on the foundations, for the winning animation to lift them off one by one.
+  // Show every card on the foundations, for the winning animation to lift them off one by one. They stay showing while
+  // that table is up, even if it's drawn again at a new size (a phone turned while the cards bounce).
   unbury() {
     this.showAll = true;
     this.render(this.state, { still: true });
-    this.showAll = false;
   }
 }
 

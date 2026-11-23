@@ -6,20 +6,34 @@ import { SUITS, RANK_LABELS, suitOf, rankOf } from './cards.js';
 // cards: in the order to launch them. rectOf(c): where a card is now. hide(c): take it off the table.
 // Returns a function that stops it.
 export function cascade(canvas, cards, rectOf, hide) {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const W = window.innerWidth, H = window.innerHeight;
-  canvas.width = Math.round(W * dpr);
-  canvas.height = Math.round(H * dpr);
   const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
+  let dpr, W, H, pace, pull;
+  const live = [];
+  // The canvas is as big as the window, and drawn at the screen's own sharpness. When the window changes shape (a
+  // phone turned while the cards bounce) it starts again at the new size, rather than being stretched to it: the
+  // trails go, the cards in the air stay where they were, inside the new edges, and carry on.
+  function size() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.scale(dpr, dpr);
+    pace = Math.sqrt(W / 500);
+    pull = 0.5 * (H / 800);
+    for (const p of live) {
+      p.x = Math.max(0, Math.min(W - p.w, p.x));
+      p.y = Math.max(0, Math.min(H - p.h, p.y));
+    }
+  }
+  size();
+  window.addEventListener('resize', size);
 
   const css = getComputedStyle(document.documentElement);
   const v = name => css.getPropertyValue(name).trim();
   const colours = { card: v('--card'), edge: v('--card-edge'), s: v('--black'), h: v('--red'), c: v('--club'), d: v('--diamond') };
-  const pace = Math.sqrt(W / 500), pull = 0.5 * (H / 800);
 
   let next = 0, lastLaunch = -1e9, last = performance.now(), raf = 0;
-  const live = [];
 
   function launch(now) {
     const c = cards[next++];
@@ -48,7 +62,7 @@ export function cascade(canvas, cards, rectOf, hide) {
     if (next < cards.length || live.some(p => !p.out)) raf = requestAnimationFrame(frame);
   }
   raf = requestAnimationFrame(frame);
-  return () => cancelAnimationFrame(raf);
+  return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', size); };
 }
 
 // One card, drawn the way the page draws it.

@@ -1901,6 +1901,36 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cw.close();
 }
 
+// A phone turned while the cards bounce: they carry on at the new size, not stretched to it, and every card on the
+// foundations still shows, to bounce off in its turn. Once the panel is closed, turning the phone leaves the canvas alone.
+{
+  const cb = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pb = await cb.newPage();
+  await pb.goto(base);
+  await pb.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pb.evaluate(async () => {
+    const { VARIANTS } = await import('./js/games/index.js');
+    const s = VARIANTS.k1.game.deal(7, 'k1');
+    const found = [0, 1, 2, 3].map(su => Array.from({ length: 13 }, (_, r) => su * 13 + r));
+    const last = found[3].pop();
+    window.patience.load({ ...s, stock: [], waste: [], found, tab: [{ down: [], up: [last] }, ...Array.from({ length: 6 }, () => ({ down: [], up: [] }))], moves: 120 }, 251000);
+  });
+  await pb.waitForSelector('#won:not([hidden])', { timeout: 10000 });
+  await pb.waitForTimeout(1000);
+  await pb.setViewportSize({ width: 844, height: 390 });
+  await pb.waitForTimeout(400);
+  const canvas = () => pb.evaluate(() => { const c = document.getElementById('bounce'); return [c.width, c.height]; });
+  assert.deepEqual(await canvas(), [1688, 780], 'the bouncing cards are drawn at the new size, not stretched to it');
+  assert.equal(await pb.locator('#table .card.deep').count(), 0, 'every card on the foundations still shows, to bounce off in turn');
+  await pb.mouse.click(30, 300);
+  await pb.click('#b-again');
+  await pb.waitForTimeout(800);
+  await pb.setViewportSize({ width: 390, height: 844 });
+  await pb.waitForTimeout(300);
+  assert.deepEqual(await canvas(), [1688, 780], 'once the panel is closed, a turn leaves the canvas alone');
+  await cb.close();
+}
+
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.
 {
   const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
