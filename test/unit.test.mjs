@@ -111,6 +111,30 @@ test('with every card face up, the rest plays itself', () => {
   assert.ok(won(t));
 });
 
+test('drawing one, the rest plays itself once every card in the columns is face up, drawing from the deck as it goes', () => {
+  const s = empty(1);
+  for (let suit = 0; suit < 4; suit++) s.found[suit] = Array.from({ length: 6 }, (_, i) => card(suit, i + 1));
+  s.tab[0].up = [card(S, 13), card(H, 12), card(S, 11)];
+  s.tab[1].up = [card(H, 13), card(S, 12), card(H, 11)];
+  const rest = [];
+  for (let r = 7; r <= 13; r++) for (const suit of [S, H, C, D]) if (r < 11 || suit === C || suit === D) rest.push(card(suit, r));
+  rest.sort((a, b) => ((a * 7919) % 53) - ((b * 7919) % 53)); // a muddle, the 7s nowhere near the top
+  s.waste = rest.slice(0, 5);
+  s.stock = rest.slice(5);
+  assert.ok(finishable(s), 'with cards in the deck and the waste');
+  assert.equal(finishable({ ...s, draw: 3 }), false, 'drawing three it waits for the deck to be used up');
+  assert.equal(finishable({ ...s, tab: s.tab.map((t, i) => (i === 0 ? { down: [t.up[0]], up: t.up.slice(1) } : t)) }), false, 'not with a card face down');
+  let t = s, draws = 0;
+  for (let i = 0; i < 2000 && !won(t); i++) {
+    const m = finishStep(t);
+    if (m.stock) draws++;
+    t = m.stock ? draw(t) : move(t, m.from, m.n, m.to);
+    assert.ok(t, `step ${i + 1} was refused`);
+  }
+  assert.ok(won(t));
+  assert.ok(draws > 0, 'drawing on the way');
+});
+
 // Play a solver's winning line through the table's own rules.
 function replay(s, path) {
   for (const m of path) {

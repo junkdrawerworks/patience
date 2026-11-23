@@ -1265,38 +1265,39 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   const saved = () => p11.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')));
   await p11.goto(base);
   await ready();
-  // Klondike with every card up but the king of spades, the last card on the waste.
+  // Klondike drawing three (drawing one would finish by itself) with every card up but the king of spades, the last card
+  // on the waste.
   const lastCard = () => p11.evaluate(() => {
     window.patience.settings.auto = false;
     window.patience.load({
-      v: 'k1', deal: 11705, draw: 1, stock: [], waste: [51], fan: 0, moves: 150,
+      v: 'k3', deal: 11705, draw: 3, stock: [], waste: [51], fan: 0, moves: 150,
       found: [0, 1, 2, 3].map(suit => Array.from({ length: suit === 3 ? 12 : 13 }, (_, r) => suit * 13 + r)),
       tab: Array.from({ length: 7 }, () => ({ down: [], up: [] })),
     });
   });
   await lastCard();
-  const before = (await saved()).stats.k1;
+  const before = (await saved()).stats.k3;
   await p11.click('.card[data-c="51"]', { position: { x: 12, y: 10 } });
   await p11.waitForTimeout(50);
   await p11.reload();
   await ready();
-  const once = (await saved()).stats.k1;
+  const once = (await saved()).stats.k3;
   assert.deepEqual([once.played, once.won, once.streak], [before.played + 1, before.won + 1, before.streak + 1], 'the win was kept through a reload');
   assert.notEqual((await p11.evaluate(() => window.patience.state)).moves, 151, 'and the won game is gone');
   await p11.reload();
   await ready();
-  assert.deepEqual((await saved()).stats.k1, once, 'a second reload counts nothing more');
+  assert.deepEqual((await saved()).stats.k3, once, 'a second reload counts nothing more');
   // N pressed just after the last card, and a new game chosen before the won panel: the win counts, and the streak goes on.
   await lastCard();
   await p11.click('.card[data-c="51"]', { position: { x: 12, y: 10 } });
   await p11.waitForTimeout(150);
   await p11.keyboard.press('n');
   assert.equal(await p11.isHidden('#new-note'), true, 'a won game is no loss');
-  await p11.click('[data-v="k1"]');
+  await p11.click('[data-v="k3"]');
   await p11.waitForTimeout(1500);
   await ready();
-  const k1 = await p11.evaluate(() => window.patience.stats.k1);
-  assert.deepEqual([k1.won, k1.streak], [once.won + 1, once.streak + 1], 'New game straight after the last card');
+  const k3 = await p11.evaluate(() => window.patience.stats.k3);
+  assert.deepEqual([k3.won, k3.streak], [once.won + 1, once.streak + 1], 'New game straight after the last card');
   assert.equal(await p11.isHidden('#won'), true, 'no won panel over the new deal');
   assert.deepEqual(errors, []);
   await c11.close();
@@ -1383,7 +1384,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await a.click('.spot[data-pile="stock"]', { force: true });
   await ready(a);
   await same('B shows the move made in A');
-  // A wins: every card up but the king of spades, the last card on the waste.
+  // A wins: every card up but the king of spades, the last card on the waste, so the game finishes itself.
   const before = await a.evaluate(() => ({ ...window.patience.stats.k1 }));
   await a.evaluate(() => {
     window.patience.settings.auto = false;
@@ -1393,7 +1394,6 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
       tab: Array.from({ length: 7 }, () => ({ down: [], up: [] })),
     });
   });
-  await a.click('.card[data-c="51"]', { position: { x: 12, y: 10 } });
   await a.waitForSelector('#won:not([hidden])');
   await b.waitForTimeout(200);
   assert.equal(await b.evaluate(() => window.patience.stats.k1.won), before.won + 1, "B has A's win in its record");
@@ -1666,6 +1666,29 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   });
   assert.ok(under.samples > 20, `cards were seen moving (${under.samples} frames)`);
   assert.equal(under.hits, 0, `a card in flight passed under a card at rest: ${under.first}`);
+
+  // Klondike drawing one, every card in the columns face up and most of the deck still to come: the game finishes
+  // itself, drawing from the deck as it goes.
+  await pf.evaluate(() => window.patience.newGame('k1', 52817));
+  await pf.waitForTimeout(1500);
+  await pf.waitForFunction(() => window.patience?.state && !window.patience.busy);
+  const finished = await pf.evaluate(async () => {
+    const card = (suit, rank) => suit * 13 + rank - 1;
+    const rest = [];
+    for (let r = 7; r <= 13; r++) for (const suit of [0, 1, 2, 3]) if (r < 11 || suit > 1) rest.push(card(suit, r));
+    rest.sort((a, b) => ((a * 7919) % 53) - ((b * 7919) % 53));
+    const tab = Array.from({ length: 7 }, () => ({ down: [], up: [] }));
+    tab[0].up = [card(0, 13), card(1, 12), card(0, 11)];
+    tab[1].up = [card(1, 13), card(0, 12), card(1, 11)];
+    window.patience.load({ v: 'k1', deal: 52817, draw: 1, stock: rest.slice(5), waste: rest.slice(0, 5), fan: 0, moves: 120, tab,
+      found: [0, 1, 2, 3].map(suit => Array.from({ length: 6 }, (_, i) => card(suit, i + 1))) });
+    const t0 = performance.now();
+    await new Promise(res => { const wait = () => (document.querySelector('#won:not([hidden])') || performance.now() - t0 > 20000 ? res() : setTimeout(wait, 50)); wait(); });
+    const s = window.patience.state;
+    return { up: s.found.map(f => f.length), deck: s.stock.length + s.waste.length, moves: s.moves, secs: (performance.now() - t0) / 1000 };
+  });
+  assert.deepEqual([finished.up, finished.deck, finished.moves], [[13, 13, 13, 13], 0, 120], 'every card went up, the deck too, and none of it counted as a move');
+  assert.ok(finished.secs < 15, `it took ${finished.secs.toFixed(1)} s`);
   assert.deepEqual(errors, [], 'errors with cards in flight');
   await cf.close();
 }
@@ -1690,7 +1713,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     const all = Array.from({ length: 52 }, (_, c) => c), used = [...low, JC, QH];
     window.patience.settings.auto = false;
     window.patience.load(window.heldTable = {
-      v: 'k1', deal: 11705, draw: 1, fan: 0, moves: 7, waste: [], found: [[], [], [], []],
+      v: 'k3', deal: 11705, draw: 3, fan: 0, moves: 7, waste: [], found: [[], [], [], []], // drawing one would finish by itself
       stock: all.filter(c => !used.includes(c)),
       tab: [0, 1, 2, 3].map(i => ({ down: [], up: low.slice(2 * i, 2 * i + 2) })).concat([{ down: [], up: [] }, { down: [], up: [QH] }, { down: [], up: [JC] }]),
     });

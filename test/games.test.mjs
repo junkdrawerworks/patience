@@ -422,7 +422,7 @@ async function followHint(v, n, { auto = true, cap = 600, switchOnAt = -1 } = {}
     let s = settle(game.deal(n, v)), drawingFor = null;
     for (let i = 0; i < cap && !game.won(s); i++) {
       if (i === switchOnAt) { auto = true; s = settle(s); drawingFor = null; }
-      while (game.finishable(s)) { const st = game.finishStep(s); s = game.move(s, st.from, st.n, st.to); }
+      while (game.finishable(s)) { const st = game.finishStep(s); s = st.stock ? game.stock(s) : game.move(s, st.from, st.n, st.to); }
       if (game.won(s)) break;
       assert.ok(!seen.has(where(s)), `${v} deal ${n}: after ${i} hints, Hint led back to a table it had been at`);
       seen.add(where(s));

@@ -198,19 +198,19 @@ async function lookForMoves() {
 
 function cancelChain() { clearTimeout(chain); chain = 0; }
 
-// Every card is in order: put them all away, lowest first.
+// Every card is in order: put them all away, lowest first, drawing from the deck (Klondike drawing one) when none fits.
 function finish() {
   table.locked = true;
   const g = G();
   const step = () => {
     const s = g.finishStep(game);
     if (!s) { table.locked = false; return; }
-    const next = g.move(game, s.from, s.n, s.to);
+    const next = s.stock ? g.stock(game) : g.move(game, s.from, s.n, s.to);
     next.moves = game.moves;
     game = next;
     table.render(game);
     if (g.won(game)) { chain = setTimeout(victory, 320); return; }
-    chain = setTimeout(step, 80);
+    chain = setTimeout(step, s.stock ? 50 : 80);
   };
   chain = setTimeout(step, 260);
 }

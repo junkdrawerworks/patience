@@ -15,7 +15,7 @@ const game = VARIANTS[V].game;
 const where = s => JSON.stringify(s, (k, x) => (k === 'moves' || k === 'fan' ? undefined : x));
 const settle = s => {
   for (let st; AUTO && !game.won(s) && !game.finishable(s) && (st = game.autoStep(s));) s = game.move(s, st.from, st.n, st.to);
-  while (game.finishable(s)) { const st = game.finishStep(s); s = game.move(s, st.from, st.n, st.to); }
+  while (game.finishable(s)) { const st = game.finishStep(s); s = st.stock ? game.stock(s) : game.move(s, st.from, st.n, st.to); }
   return s;
 };
 

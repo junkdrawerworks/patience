@@ -23,7 +23,8 @@
 //                           { text, piles }, piles being any to light up (the empty columns Spider wants filled)
 //   tapTarget(s, from, n)   where a tap sends the top n cards of a pile, or null
 //   autoStep(s)             a card that can go up by itself because nothing could need it, or null
-//   won(s), finishable(s), finishStep(s)    finished; ready to finish by itself; the next card when it does
+//   won(s), finishable(s), finishStep(s)    finished; ready to finish by itself; the next card when it does, as a move,
+//                           or { stock: true } to tap the stock (Klondike drawing one, when no card fits)
 //   easyHint(s)             a hint for a position the solver calls as good as won (Klondike and FreeCell only)
 //   position(s)             the table the way its solver sees it (FreeCell and Spider)
 //   search(s, { auto })     a solver for this position (step(budget), result, path, firstMove()); auto says whether

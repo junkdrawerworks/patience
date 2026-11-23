@@ -165,18 +165,21 @@ export function autoStep(s) {
 
 export const won = s => s.found.every(f => f.length === 13);
 
-// Every card is face up and nothing is left to draw: the rest plays itself.
-export const finishable = s => !won(s) && !s.stock.length && !s.waste.length && s.tab.every(t => !t.down.length);
+// Every card in the columns is face up and, drawing three, nothing is left to draw: the rest plays itself. Drawing one,
+// the deck can be left: every card in it comes round in turn, and the lowest card not yet up is always on top of a
+// column or somewhere in the deck, so drawing until it turns up always gets there. Drawing three it might never.
+export const finishable = s => !won(s) && (s.draw === 1 || (!s.stock.length && !s.waste.length)) && s.tab.every(t => !t.down.length);
 
-// The next card up when finishing: the lowest one that fits, which is always on top of a column.
+// The next step when finishing: the lowest card that fits, on top of a column or the waste, or a draw when none does.
 export function finishStep(s) {
   const counts = foundCounts(s);
   let best = null;
-  TABLEAU.forEach((id, i) => {
-    const c = top(s.tab[i].up);
+  ['waste', ...TABLEAU].forEach(id => {
+    const c = top(visible(s, id));
     if (c !== undefined && fits(c, counts) && (!best || rankOf(c) < best.rank)) best = { from: id, rank: rankOf(c), c };
   });
-  return best && { from: best.from, n: 1, to: foundationFor(s, best.c) };
+  if (best) return { from: best.from, n: 1, to: foundationFor(s, best.c) };
+  return s.stock.length || s.waste.length ? { stock: true } : null;
 }
 
 // The same position the way the solver sees it.
