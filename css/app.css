@@ -517,6 +517,7 @@ button { font: inherit; color: inherit; }
 .pick h3 { margin: 0 0 3px; font: 600 19px/1.25 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
 .pick p { margin: 0 0 9px; color: var(--muted); font-size: 14px; line-height: 1.4; text-wrap: balance; }
 .pick .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick .aside { margin: 7px 0 0; font-size: 13px; }
 .choice {
   flex: 1 1 0;
   min-width: max-content;
@@ -553,10 +554,12 @@ button { font: inherit; color: inherit; }
   #sheet-new .panel { width: min(100% - 32px, 760px); max-height: calc(100dvh - 8px); padding-top: 14px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
   #sheet-new h2 { margin-bottom: 4px; font-size: 21px; }
   #sheet-new .note { margin: 0 0 8px; }
-  #sheet-new .games { grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  #sheet-new .games { grid-template-columns: 1fr 0.85fr 1.25fr; gap: 14px; } /* Spider's three buttons on one line */
   #sheet-new .pick h3 { font-size: 18px; }
   #sheet-new .pick p { font-size: 13px; line-height: 1.35; margin-bottom: 8px; }
   #sheet-new .choice { padding: 9px 12px; font-size: 15px; }
+  #sheet-new .pick:last-child .choice { padding: 9px 6px; font-size: 14.5px; }
+  #sheet-new .pick .aside { margin: 5px 0 0; font-size: 12.5px; line-height: 1.3; }
   .plains { display: flex; gap: 8px; margin-top: 6px; }
   .plains .plain { margin-top: 0; }
 }

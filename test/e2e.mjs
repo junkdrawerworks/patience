@@ -2166,7 +2166,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
 
 // The New game sheet tells a newcomer how each game is won and built: FreeCell's foundations and alternating colours,
 // and Spider's any suit, with only a run of one suit moving. Part way through a game, it still doesn't scroll held
-// sideways, and on a 360 by 740 phone it's no taller than it was (715 px).
+// sideways, and on a 360 by 740 phone it's no taller than it was (715 px) and the two lines under Four suits (760). Those
+// lines point four-suit players to Four-colour suits.
 {
   const cn = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   const pn = await cn.newPage();
@@ -2176,6 +2177,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   const lines = await pn.$$eval('#sheet-new .pick p', ps => ps.map(p => p.textContent));
   assert.match(lines[1], /foundations ace to king.*down in alternating colours/, 'FreeCell says how to win and how to build');
   assert.match(lines[2], /any suit, but only a run of one suit moves/, 'Spider says a card goes on any suit, and what moves');
+  assert.equal(lines[3], 'Four-colour suits, in the menu, make the suits easier to tell apart.');
   await pn.click('.spot[data-pile="stock"]', { force: true });
   await pn.waitForTimeout(300);
   for (const [width, height] of [[844, 390], [740, 360], [360, 740]]) {
@@ -2184,7 +2186,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     await pn.waitForTimeout(400);
     const fit = await pn.$eval('#sheet-new .panel', p => [p.scrollHeight, p.clientHeight]);
     if (width > height) assert.ok(fit[0] <= fit[1], `the New game sheet scrolls at ${width} by ${height}: ${fit}`);
-    else assert.ok(fit[0] <= 715, `the New game sheet at ${width} by ${height} is ${fit[0]} px tall, more than it was`);
+    else assert.ok(fit[0] <= 760, `the New game sheet at ${width} by ${height} is ${fit[0]} px tall, more than it was`);
     await pn.keyboard.press('Escape');
   }
   await cn.close();
