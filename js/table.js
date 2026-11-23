@@ -114,6 +114,17 @@ export class Table {
     }
     const spots = m.piles.map(id => this.spots[id]);
     if (spots.some((el, i) => this.el.children[i] !== el)) this.el.prepend(...spots);
+    // A faint line in the gap before top-row column L.split, setting its piles apart from the ones before it.
+    let split = this.el.querySelector(':scope > .split');
+    if (L.split) {
+      if (!split) {
+        split = document.createElement('div');
+        split.className = 'split';
+        split.setAttribute('aria-hidden', 'true');
+        this.el.append(split);
+      }
+      split.style.transform = `translate(${x[L.split] - gap / 2}px, ${m.top}px)`;
+    } else split?.remove();
 
     const st = this.el.style;
     st.setProperty('--cw', cw + 'px');

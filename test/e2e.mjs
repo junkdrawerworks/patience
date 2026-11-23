@@ -2038,6 +2038,32 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ct.close();
 }
 
+// FreeCell's top row has a faint line between the free cells and the foundations, in the gap between them, upright and
+// sideways; it isn't read out, and Klondike's top row has none.
+{
+  const cs = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const ps = await cs.newPage();
+  await ps.goto(base);
+  await ps.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const split = () => ps.evaluate(() => {
+    const line = document.querySelectorAll('#table .split'), box = id => document.querySelector(`.spot[data-pile="${id}"]`)?.getBoundingClientRect();
+    if (line.length !== 1) return { lines: line.length };
+    const l = line[0].getBoundingClientRect(), cell = box('c3'), found = box('f0');
+    return { lines: 1, hidden: line[0].getAttribute('aria-hidden'), between: l.left >= cell.right && l.right <= found.left, wide: l.width, alongside: l.top >= cell.top && l.bottom <= cell.bottom };
+  });
+  for (const [width, height] of [[390, 844], [844, 390]]) {
+    await ps.setViewportSize({ width, height });
+    await ps.evaluate(() => window.patience.newGame('fc', 617));
+    await ps.waitForTimeout(1200);
+    await ps.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+    assert.deepEqual(await split(), { lines: 1, hidden: 'true', between: true, wide: 2, alongside: true }, `FreeCell's line at ${width} by ${height}`);
+  }
+  await ps.evaluate(() => window.patience.newGame('k1', 52817));
+  await ps.waitForTimeout(1200);
+  assert.deepEqual(await split(), { lines: 0 }, 'Klondike has no line in its top row');
+  await cs.close();
+}
+
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.
 {
   const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });

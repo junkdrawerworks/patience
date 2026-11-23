@@ -273,6 +273,19 @@ button { font: inherit; color: inherit; }
 .spot.target { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--glow) 80%, transparent), 0 0 10px 1px color-mix(in srgb, var(--glow) 35%, transparent); }
 .spot.hint { box-shadow: inset 0 0 0 2px var(--glow), 0 0 14px 2px color-mix(in srgb, var(--glow) 60%, transparent); animation: pulse 1s ease-in-out 3; }
 
+/* The line between two groups of places in the top row (FreeCell's free cells and foundations), in the middle of the
+   gap between them. */
+.split {
+  position: absolute;
+  left: -1px;
+  top: calc(var(--ch) * 0.15);
+  width: 2px;
+  height: calc(var(--ch) * 0.7);
+  border-radius: 1px;
+  background: var(--slot);
+  pointer-events: none;
+}
+
 /* ---- cards ---- */
 
 .card {
@@ -660,6 +673,7 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
   .card { forced-color-adjust: none; }
   .spot { forced-color-adjust: none; color: CanvasText; outline: 2px solid CanvasText; outline-offset: -2px; box-shadow: none; }
   .spot[data-kind='stock'], .spot[data-kind='deals'], .spot[data-kind='stock'].gone { color: CanvasText; }
+  .split { forced-color-adjust: none; background: CanvasText; }
   .card.hint .face, .card.hint .back, .spot.hint { outline: 3px solid Highlight; outline-offset: 1px; }
   .card.target .face, .spot.target { outline: 2px dashed Highlight; outline-offset: 1px; }
   .toast, .panel, .stats div { border: 1px solid CanvasText; }

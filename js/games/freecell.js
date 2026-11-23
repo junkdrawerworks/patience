@@ -58,6 +58,7 @@ export const freecell = {
       top: [...C.map((id, i) => ({ id, col: i, kind: 'stack' })), ...F.map((id, i) => ({ id, col: 4 + i, kind: 'stack', label: 'A' }))],
       tableau: T,
       dealFrom: 'f3',
+      split: 4, // a line between the free cells and the foundations
     };
   },
 
