@@ -286,6 +286,8 @@ await page.click('.spot[data-pile="stock"]', { force: true });
 await page.waitForSelector('#toast:not([hidden])');
 assert.match(await page.textContent('#toast'), /empty column/);
 assert.equal((await state()).stock.length, 40, 'no row while a column is empty');
+assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('.spot.hint')].map(el => el.dataset.pile)), ['t9'], 'the empty column lights up');
+await page.waitForSelector('.spot[data-pile="t9"]:not(.hint)', { timeout: 3000 });
 
 // Win a Spider game: the cleared runs bounce off.
 await page.evaluate(() => window.patience.newGame('s1', 3));

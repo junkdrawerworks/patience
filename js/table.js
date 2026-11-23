@@ -165,7 +165,7 @@ export class Table {
     if (opts.deal && calm) { opts = { still: true }; this.dealDuration = 0; }
     const first = !this.state || this.v !== s.v;
     // A hint stays lit until the cards move: drawing the same table again (a new size, the deck moved) keeps it.
-    if (s !== this.state) this.clearHint();
+    if (s !== this.state) { this.clearHint(); this.unflag(); }
     this.state = s;
     if (first) this.setup(s);
     if (!this.m || this.m.layoutKey !== layoutKey(s, this.left, this.m.step)) this.layout();
@@ -467,6 +467,20 @@ export class Table {
     }
     marks.forEach(el => el.classList.add('hint'));
     this.hinted = marks;
+  }
+
+  // Light up these piles' empty places for a couple of seconds, beside a message about them.
+  flagSpots(ids) {
+    this.unflag();
+    this.flagged = ids.map(id => this.spots[id]).filter(Boolean);
+    this.flagged.forEach(el => { el.classList.remove('hint'); void el.offsetWidth; el.classList.add('hint'); });
+    this.flagTimer = setTimeout(() => this.unflag(), 2000);
+  }
+
+  unflag() {
+    clearTimeout(this.flagTimer);
+    this.flagged?.forEach(el => { if (!this.hinted?.includes(el)) el.classList.remove('hint'); });
+    this.flagged = null;
   }
 
   clearHint() {

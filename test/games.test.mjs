@@ -201,7 +201,8 @@ test("Spider won't deal a row while a column is empty", () => {
   const s = spider.deal(3, 's1');
   const blocked = { ...s, tab: s.tab.map((t, i) => (i === 4 ? { down: [], up: [] } : t)) };
   assert.equal(spider.stock(blocked), null);
-  assert.match(spider.stockNote(blocked), /empty column/);
+  assert.match(spider.stockNote(blocked).text, /empty column/);
+  assert.deepEqual(spider.stockNote(blocked).piles, ['t4'], 'and lights up the empty column');
   const next = spider.stock(s);
   assert.equal(next.stock.length, 40);
   assert.ok(next.tab.every((t, i) => t.up.length === s.tab[i].up.length + 1));
@@ -216,7 +217,7 @@ test('Spider with fewer cards on the table than columns and a row left is out of
   assert.equal(spider.stock(s), null, 'no row can be dealt');
   assert.equal(spider.outOfMoves(s), true);
   assert.equal(spider.deadEnd(s).none, false, 'the cards can still move about');
-  assert.equal(spider.stockNote(s), 'There aren’t enough cards left to fill every column, so this row can’t be dealt.');
+  assert.deepEqual(spider.stockNote(s), { text: 'There aren’t enough cards left to fill every column, so this row can’t be dealt.', piles: [] }, 'and lights up nothing');
   // With ten cards on the table, they can always be spread one to a column, and the row dealt.
   const ten = { ...s, tab: s.tab.map((t, i) => ({ down: [], up: [i < 3 ? t.up[0] : 6 * 52 + i] })), sets: s.sets.slice(0, 6), stock: s.stock };
   assert.equal(spider.outOfMoves(ten), false);

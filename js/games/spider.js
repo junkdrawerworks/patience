@@ -118,9 +118,10 @@ export const spider = {
   },
 
   stockNote(s) {
-    if (!s.stock.length || !s.tab.some(t => !t.up.length && !t.down.length)) return null;
-    if (s.tab.reduce((n, t) => n + t.down.length + t.up.length, 0) < 10) return 'There aren’t enough cards left to fill every column, so this row can’t be dealt.';
-    return 'Put a card in every empty column before dealing a new row.';
+    const empty = T.filter((id, i) => !s.tab[i].up.length && !s.tab[i].down.length);
+    if (!s.stock.length || !empty.length) return null;
+    if (s.tab.reduce((n, t) => n + t.down.length + t.up.length, 0) < 10) return { text: 'There aren’t enough cards left to fill every column, so this row can’t be dealt.', piles: [] };
+    return { text: 'Put a card in every empty column before dealing a new row.', piles: empty };
   },
 
   // A tap sends a run onto a card one higher of its own suit if there is one, then any card one higher,

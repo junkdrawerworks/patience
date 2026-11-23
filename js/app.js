@@ -55,7 +55,9 @@ const table = new Table($('table'), {
   stock: () => {
     if (act(G().stock(game), true)) return;
     const note = G().stockNote(game);
-    if (note) toast(note);
+    if (!note) return;
+    toast(note.text);
+    table.flagSpots(note.piles);
   },
   tap: (pile, n) => {
     if (pile[0] === 'f') return;

@@ -16,7 +16,8 @@
 //   targets(s)              the piles cards can be dropped on
 //   canDrop(s, cards, to)   whether they can go there
 //   move(s, from, n, to)    the new state, or null if the rules say no
-//   stock(s)                the new state after tapping the stock, or null; stockNote(s) says why not, if it matters
+//   stock(s)                the new state after tapping the stock, or null; stockNote(s) says why not, if it matters:
+//                           { text, piles }, piles being any to light up (the empty columns Spider wants filled)
 //   tapTarget(s, from, n)   where a tap sends the top n cards of a pile, or null
 //   autoStep(s)             a card that can go up by itself because nothing could need it, or null
 //   won(s), finishable(s), finishStep(s)    finished; ready to finish by itself; the next card when it does
