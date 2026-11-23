@@ -143,6 +143,19 @@ button { font: inherit; color: inherit; }
   touch-action: none;
   isolation: isolate; /* cards stack among themselves, under the sheets */
 }
+/* Said in the middle of the felt while the first deal is still being shuffled. */
+.wait {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  height: max-content;
+  padding: 0 24px;
+  text-align: center;
+  text-wrap: balance;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--on-felt-muted);
+}
 /* On a phone's touch screen, the cards in the outer columns keep 24 px from the screen's sides, clear of where
    Android's back gesture starts, so picking one up there doesn't take you out of the game (table.js reads this). */
 @media (pointer: coarse) and (max-width: 560px) {

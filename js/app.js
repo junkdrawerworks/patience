@@ -185,7 +185,12 @@ async function newGame(v, number) {
   settings.variant = v;
   table.locked = true;
   const g = VARIANTS[v].game;
-  slow = setTimeout(() => { $('status').textContent = 'Shuffling for a deal that can be won…'; }, 250);
+  slow = setTimeout(() => {
+    const line = 'Shuffling for a deal that can be won…';
+    $('status').textContent = line;
+    // With no game on the table yet (the first time it's opened), the felt says so too, so it doesn't look broken.
+    if (!game) { $('wait').textContent = line; $('wait').hidden = false; }
+  }, 250);
   const n = number ?? (settings.winnable ? await dealer.take(v) : g.randomDeal());
   if (ticket !== dealing) return; // another game was chosen while this one was being shuffled
   clearTimeout(slow);
@@ -348,6 +353,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function showInfo() {
   if (!game) return;
+  $('wait').hidden = true;
   $('status').textContent = `${label(game.v)} · Deal ${game.deal.toLocaleString('en-US')}`;
   $('moves').textContent = plural(game.moves, 'move');
   $('time').textContent = clock(played());

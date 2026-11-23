@@ -1495,6 +1495,35 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ca.close();
 }
 
+// Opened for the first time, while the first deal is still being shuffled, the felt says so in the middle, not just
+// the line at the top, and Undo is dimmed. Drawing three, with the random numbers fixed so that the first few deals
+// tried can't be won, it takes a few seconds to find one.
+{
+  const cw = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  const pw1 = await cw.newPage();
+  const errors = [];
+  pw1.on('pageerror', e => errors.push(e.message));
+  await pw1.addInitScript(() => {
+    localStorage.setItem('patience.v1', JSON.stringify({ settings: { variant: 'k3', winnable: true, auto: true, clock: true, four: false, left: false } }));
+    let x = 6;
+    Math.random = () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648;
+  });
+  await pw1.goto(base);
+  await pw1.waitForSelector('#wait:not([hidden])', { timeout: 5000 });
+  assert.equal(await pw1.textContent('#wait'), 'Shuffling for a deal that can be won…');
+  assert.equal(await pw1.isDisabled('#b-undo'), true, 'Undo is dimmed while there is no game');
+  const middle = await pw1.evaluate(() => {
+    const w = document.getElementById('wait').getBoundingClientRect(), t = document.getElementById('table').getBoundingClientRect();
+    return Math.abs((w.top + w.bottom) / 2 - (t.top + t.bottom) / 2) < 2 && Math.abs((w.left + w.right) / 2 - (t.left + t.right) / 2) < 2;
+  });
+  assert.ok(middle, 'in the middle of the felt');
+  await pw1.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 60000 });
+  assert.equal(await pw1.isHidden('#wait'), true, 'gone once the deal is here');
+  assert.equal(await pw1.isDisabled('#b-undo'), true, 'and Undo still dimmed on the new deal');
+  assert.deepEqual(errors, [], 'errors on a first open');
+  await cw.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
