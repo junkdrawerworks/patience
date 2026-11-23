@@ -262,29 +262,35 @@ export class Table {
 
   // A card on its way somewhere flies over everything else, lifted off the table, and takes no taps, so a tap goes to
   // whatever is under it: a quick second tap on the Spider deck while the last row is still leaving it deals another
-  // row. After `ms`, once it's there, it settles into its pile, and hides again if it's buried there.
+  // row. Once it's there it settles into its pile, and hides again if it's buried there.
   fly(c, p, ms) {
     const el = this.cards.get(c);
-    clearTimeout(this.flights.get(c)?.timer);
+    this.land(c, true);
     el.style.zIndex = 5000 + p.z;
     el.classList.remove('deep');
     el.classList.add('flying');
     const f = { z: p.z, deep: p.deep };
-    // On a busy phone a move can start a few frames late, so it lands once it has stopped moving, not just on time.
-    const arrived = () => {
-      if (el.getAnimations?.().some(a => a.transitionProperty === 'transform' && a.playState === 'running')) f.timer = setTimeout(arrived, 30);
+    // It lands the moment it gets there. In case it never moves (it had no distance to go) after `ms` it lands anyway,
+    // once it has stopped moving: on a busy phone a move can start a few frames late.
+    f.end = e => { if (e.target === el && e.propertyName === 'transform') this.land(c); };
+    el.addEventListener('transitionend', f.end);
+    const late = () => {
+      if (el.getAnimations?.().some(a => a.transitionProperty === 'transform' && a.playState === 'running')) f.timer = setTimeout(late, 30);
       else this.land(c);
     };
-    f.timer = setTimeout(arrived, ms);
+    f.timer = setTimeout(late, ms);
     this.flights.set(c, f);
   }
 
-  land(c) {
+  // `again`: it's about to fly off somewhere else, so it needn't settle first.
+  land(c, again) {
     const f = this.flights.get(c);
     if (!f) return;
     clearTimeout(f.timer);
     this.flights.delete(c);
     const el = this.cards.get(c);
+    el.removeEventListener('transitionend', f.end);
+    if (again) return;
     el.style.zIndex = f.z;
     el.classList.toggle('deep', !!f.deep);
     el.classList.remove('flying');

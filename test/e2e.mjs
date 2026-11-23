@@ -1276,11 +1276,14 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     let going = true;
     const tick = () => {
       const cards = [...document.querySelectorAll('.card')];
-      const moving = cards.filter(el => el.getAnimations().some(a => a.transitionProperty === 'transform' && a.playState === 'running' && a.currentTime > 0));
+      // Moving: part way there. At rest: not on its way at all (a card only just setting off is still in its place, but
+      // isn't at rest).
+      const trips = el => el.getAnimations().filter(a => a.transitionProperty === 'transform' && a.playState === 'running');
+      const moving = cards.filter(el => trips(el).some(a => a.currentTime > 0)), resting = cards.filter(el => !trips(el).length);
       if (moving.length) seen.samples++;
       for (const f of moving) {
         const fr = f.getBoundingClientRect(), fz = +f.style.zIndex || 0;
-        const over = cards.filter(o => o !== f && !moving.includes(o) && getComputedStyle(o).visibility !== 'hidden' && (+o.style.zIndex || 0) > fz).filter(o => {
+        const over = resting.filter(o => getComputedStyle(o).visibility !== 'hidden' && (+o.style.zIndex || 0) > fz).filter(o => {
           const r = o.getBoundingClientRect();
           return Math.min(fr.right, r.right) - Math.max(fr.left, r.left) > 8 && Math.min(fr.bottom, r.bottom) - Math.max(fr.top, r.top) > 8;
         });
