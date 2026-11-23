@@ -119,7 +119,7 @@ export class Table {
           put(c, x0 + dir * (rows - 1 - r) * step, m.top, z0 + i, false, i, !(topOfRow || (r === rows - 1 && i >= down.length - 2)));
         });
       } else if (kind === 'waste') {
-        const fanned = game.fan?.(s) || 0, step = Math.round(m.cw * 0.3);
+        const fanned = game.fan?.(s) || 0, step = Math.round(m.cw * 0.46); // wide enough to read a covered 10
         up.forEach((c, i) => {
           const k = i - (up.length - fanned);
           put(c, x0 + (k > 0 ? k * step : 0), m.top, z0 + i, true, i, deep(i, up.length, Math.max(1, fanned) + 1));
