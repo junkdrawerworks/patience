@@ -1,4 +1,5 @@
-// Helpers for driving the page from tests and tools: play a deal part way with the solver's own moves.
+// Helpers for driving the page from tests and tools: play a deal part way with the solver's own moves, with Undo able to
+// take them back.
 // Runs inside the page (pass to page.evaluate).
 export async function playInto({ v, n, steps, ms = 0 }) {
   const { VARIANTS } = await import('./js/games/index.js');
@@ -8,8 +9,10 @@ export async function playInto({ v, n, steps, ms = 0 }) {
   while (!search.result && search.nodes < 400000) search.step(5000);
   if (search.result !== 'won') throw new Error(`${v} deal ${n} did not solve`);
   let i = 0, left = steps;
+  const past = []; // every table on the way, for Undo
   while (i < search.path.length && left-- > 0) {
     const m = search.path[i], ui = game.fromSolver(s, m);
+    past.push(s);
     if (ui.stock) {
       s = game.stock(s);
       // In Klondike a card deeper in the stock takes several draws before it can be played.
@@ -19,6 +22,6 @@ export async function playInto({ v, n, steps, ms = 0 }) {
     s = game.move(s, ui.from, ui.n, ui.to);
     i++;
   }
-  window.patience.load(s, ms);
+  window.patience.load(s, ms, past);
   return { moves: search.path.length };
 }

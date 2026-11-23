@@ -677,11 +677,12 @@ function resume(kept) {
   return true;
 }
 
-// For the tests and the screenshot tool.
+// For the tests and the screenshot tool. load(state, ms, past): a table to play from, with the time spent so far and the
+// tables before it, for Undo.
 window.patience = {
   get state() { return game; },
   get busy() { return table.locked || !!chain; },
-  load(state, ms = 0) { cancelChain(); clearTimeout(landed); game = state; history = []; elapsed = ms; since = 0; winCounted = false; table.locked = false; table.render(game, { still: true }); showInfo(); after(); },
+  load(state, ms = 0, past = []) { cancelChain(); clearTimeout(landed); game = state; history = past.slice(); elapsed = ms; since = 0; winCounted = false; table.locked = false; table.render(game, { still: true }); showInfo(); after(); },
   newGame,
   settings,
   stats,

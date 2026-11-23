@@ -1,5 +1,6 @@
 // Renders the README screenshots (docs/*.png) and the link preview (og.png):  node tools/screenshots.mjs
-// Math.random is seeded and the deals are fixed, so the same pictures come out every time.
+// Math.random is seeded, the deals are fixed, and the bouncing cards run on Playwright's clock rather than the real one,
+// so the same pictures come out every time.
 // Needs Playwright, and upng-js from `npm install`.
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
@@ -37,8 +38,9 @@ async function open(viewport, deviceScaleFactor, scheme = 'light') {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor, hasTouch: true, serviceWorkers: 'block', colorScheme: scheme });
   const page = await ctx.newPage();
   await page.addInitScript(seed => {
-    let a = seed; // mulberry32
-    Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    // mulberry32; reseed() starts it again, for the bouncing cards (see bounce())
+    window.reseed = a => { Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+    window.reseed(seed);
     localStorage.setItem('patience.v1', JSON.stringify({ stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 171000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } } }));
   }, SEED);
   await page.goto(base);
@@ -47,6 +49,21 @@ async function open(viewport, deviceScaleFactor, scheme = 'light') {
   return page;
 }
 const settle = page => page.waitForTimeout(700);
+
+// Win, then let the cards bounce for `ms` of the page's own time, which stands still until then and while the picture
+// is taken: the bouncing is drawn by the page's clock, so waiting on the real one caught them somewhere else each time.
+// Which way each card bounces comes from Math.random, which the next deal being found in the background also uses,
+// as far as it has got, so it starts again from the seed here.
+async function bounce(page, win, ms) {
+  const start = Date.UTC(2026, 0, 1); // the same time every run, or each frame of the bounce falls a little differently
+  await page.clock.install({ time: start });
+  await page.clock.pauseAt(start + 1000);
+  await win();
+  await page.evaluate(seed => window.reseed(seed), SEED);
+  await page.clock.runFor(ms + 700); // the won panel waits 700 ms for the last card to land
+  await page.waitForSelector('#won:not([hidden])');
+  await page.waitForTimeout(500); // the panel's own fade, which runs on the real clock
+}
 
 // Phone screenshots for the README.
 {
@@ -62,7 +79,7 @@ const settle = page => page.waitForTimeout(700);
   await page.waitForFunction(() => !window.patience.busy);
   await page.click('#b-hint');
   await page.waitForSelector('.hint');
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(3300); // the hint's glow pulses three times, then holds
   await shot('phone-klondike');
 
   // FreeCell game 617 part way.
@@ -83,11 +100,9 @@ const settle = page => page.waitForTimeout(700);
   await shot('phone-new');
   await page.click('#sheet-new [data-close].plain');
 
-  // Winning.
+  // Winning: the cards bounce for the same time every run (see bounce()).
   await fresh('k1', 52817);
-  await page.evaluate(playInto, { v: 'k1', n: 52817, steps: 9999, ms: 281000 });
-  await page.waitForSelector('#won:not([hidden])', { timeout: 20000 });
-  await page.waitForTimeout(4500);
+  await bounce(page, () => page.evaluate(playInto, { v: 'k1', n: 52817, steps: 9999, ms: 281000 }), 4500);
   await shot('phone-won');
   await page.context().close();
 }
@@ -96,9 +111,7 @@ const settle = page => page.waitForTimeout(700);
 {
   const page = await open({ width: 620, height: 630 }, 1);
   await page.addStyleTag({ content: '.top, .bar { visibility: hidden } .won .panel { display: none !important }' });
-  await page.evaluate(playInto, { v: 'k1', n: 52817, steps: 9999 });
-  await page.waitForSelector('#won:not([hidden])', { timeout: 20000 });
-  await page.waitForTimeout(5900);
+  await bounce(page, () => page.evaluate(playInto, { v: 'k1', n: 52817, steps: 9999 }), 5900);
   const shot = (await page.screenshot()).toString('base64');
   await page.context().close();
 
