@@ -39,7 +39,7 @@ It's a static site: plain HTML, CSS and JavaScript, with no build step.
 
 ```sh
 npx serve .                       # or any static file server, then open the printed address
-npm install                       # once, for the bundler and the screenshot tool's PNG compressor
+npm install                       # once, for the bundler and the PNG compressor the screenshot and icon tools use
 npm test                          # the rules and the solvers in Node, then every game played in Chromium (needs Playwright)
 node tools/screenshots.mjs        # redraws docs/*.png and og.png (--check lists any that no longer match, changing nothing)
 node tools/make-icons.mjs         # redraws the PNG icons from icon.svg
