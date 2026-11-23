@@ -1360,7 +1360,9 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c18.close();
 }
 
-// Start this deal again is offered only once there's something to start again: not on a fresh deal.
+// Start this deal again is offered only once there's something to start again: not on a fresh deal. Part way through a
+// game, the sheet says a new deal counts it as a loss and starting it again doesn't, and starting it again keeps the
+// streak and the count of games played.
 {
   const c16 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
   const p16 = await c16.newPage();
@@ -1375,6 +1377,15 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p16.click('#b-new');
   assert.equal(await p16.isVisible('#b-restart'), true, 'Start this deal again after a move');
   assert.equal(await p16.textContent('#b-keep'), 'Keep playing');
+  assert.equal(await p16.textContent('#new-note'), "A new deal counts the game you're in as a loss. Starting this deal again doesn't.");
+  assert.equal(await p16.isVisible('#new-note'), true);
+  await p16.evaluate(() => { const st = window.patience.stats[window.patience.state.v]; st.streak = 3; st.best = 3; });
+  const was = await p16.evaluate(() => ({ ...window.patience.stats[window.patience.state.v] }));
+  await p16.click('#b-restart');
+  await p16.waitForTimeout(1500);
+  await ready();
+  assert.equal((await p16.evaluate(() => window.patience.state)).moves, 0, 'the deal started again');
+  assert.deepEqual(await p16.evaluate(() => window.patience.stats[window.patience.state.v]), was, 'with the streak and the count kept');
   await c16.close();
 }
 
