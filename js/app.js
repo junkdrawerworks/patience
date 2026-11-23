@@ -259,6 +259,7 @@ function start(state, again) {
   if (again && counted) stopClock();
   else { elapsed = 0; since = 0; counted = false; }
   winCounted = false;
+  winNews = null;
   // A deal just checked comes with the way through, for Hint's first press.
   const way = !again && dealer.pathFor(state.v, state.deal);
   if (way) primeLine(state, way, settings.auto);
@@ -316,6 +317,7 @@ function recordWin() {
   winCounted = true;
   stopClock();
   const st = stats[game.v];
+  winNews = newsOf(st, elapsed, game.v);
   if (!counted) st.played++;
   st.won++;
   st.streak++;
@@ -323,6 +325,21 @@ function recordWin() {
   st.fastest = st.fastest ? Math.min(st.fastest, elapsed) : elapsed;
   counted = false;
   write();
+}
+
+// What a win in `ms` sets in record `st`, as it is before the win counts, for the won panel to say: the first win at this
+// way of playing, the fastest yet, or the longest streak yet, whichever comes first; null if none.
+let winNews = null;
+function newsOf(st, ms, v) {
+  if (!st.won) return { text: `Your first win at ${label(v)}.`, tile: 'Won' };
+  if (!st.fastest || ms < st.fastest) {
+    // By as much as the two times shown differ, in whole seconds.
+    const by = Math.floor(st.fastest / 1000) - Math.floor(ms / 1000), m = Math.floor(by / 60), sec = by % 60;
+    const span = [m && plural(m, 'minute'), sec && plural(sec, 'second')].filter(Boolean).join(' ');
+    return { text: st.fastest && by > 0 ? `Your fastest yet, by ${span}.` : 'Your fastest yet.', tile: 'Fastest' };
+  }
+  if (st.streak + 1 > Math.max(1, st.best)) return { text: `Your best streak yet: ${st.streak + 1} in a row.`, tile: 'Streak' };
+  return null;
 }
 
 // A game won (or sure to be, so it can't be lost) is over: it can be looked at, but not played on.
@@ -351,7 +368,9 @@ function victory() {
     ['Won', `${st.won} of ${st.played}`],
     ['Streak', st.streak],
     ['Fastest', clock(st.fastest)],
-  ]);
+  ], winNews?.tile);
+  $('won-news').textContent = winNews?.text || '';
+  $('won-news').hidden = !winNews;
   const overlay = $('won'), panel = overlay.querySelector('.panel');
   hideToast();
   overlay.hidden = false;
@@ -415,8 +434,9 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', () => { stopClock(); write(); });
 
-function tiles(list) {
-  return list.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+// `hot`: the one a win has just set, which stands out.
+function tiles(list, hot) {
+  return list.map(([k, v]) => `<div${k === hot ? ' class="new"' : ''}><dt>${k}</dt><dd>${v}</dd></div>`).join('');
 }
 
 function showStats(v) {

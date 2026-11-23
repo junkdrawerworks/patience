@@ -1684,6 +1684,41 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   }
 }
 
+// The won panel says when a win sets something in the record, and its tile stands out: a first win, the fastest yet and
+// by how much, the best streak yet. A win that sets nothing says nothing more. FreeCell game 617 each time, with the
+// time on the clock set, and the record set before each win.
+{
+  const cw = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
+  const pw2 = await cw.newPage();
+  const errors = [];
+  pw2.on('pageerror', e => errors.push(e.message));
+  const ready = () => pw2.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pw2.goto(base);
+  await ready();
+  const win = async (record, ms) => {
+    await pw2.evaluate(r => Object.assign(window.patience.stats.fc, r), record);
+    await pw2.evaluate(playInto, { v: 'fc', n: 617, steps: 9999, ms });
+    await pw2.waitForSelector('#won .panel:not([hidden])', { timeout: 30000 });
+    const said = await pw2.evaluate(() => {
+      const news = document.getElementById('won-news');
+      return [news.hidden ? null : news.textContent, [...document.querySelectorAll('#won-stats .new dt')].map(dt => dt.textContent).join()];
+    });
+    await pw2.click('#b-again');
+    await pw2.waitForSelector('#won', { state: 'hidden' });
+    await pw2.waitForTimeout(1500);
+    await ready();
+    return said;
+  };
+  const blank = { played: 0, won: 0, streak: 0, best: 0, fastest: 0 };
+  assert.deepEqual(await win(blank, 250000), ['Your first win at FreeCell.', 'Won']);
+  assert.deepEqual(await win({ played: 9, won: 5, streak: 0, best: 4, fastest: 300000 }, 281000), ['Your fastest yet, by 19 seconds.', 'Fastest']);
+  assert.deepEqual(await win({ played: 9, won: 5, streak: 0, best: 4, fastest: 900000 }, 281000), ['Your fastest yet, by 10 minutes 19 seconds.', 'Fastest']);
+  assert.deepEqual(await win({ played: 9, won: 5, streak: 5, best: 5, fastest: 60000 }, 281000), ['Your best streak yet: 6 in a row.', 'Streak']);
+  assert.deepEqual(await win({ played: 9, won: 5, streak: 0, best: 4, fastest: 60000 }, 281000), [null, ''], 'a slower win, with no best streak, says nothing more');
+  assert.deepEqual(errors, [], 'errors winning');
+  await cw.close();
+}
+
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.
 {
   const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });

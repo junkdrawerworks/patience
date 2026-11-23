@@ -41,7 +41,7 @@ async function open(viewport, deviceScaleFactor, scheme = 'light') {
     // mulberry32; reseed() starts it again, for the bouncing cards (see bounce())
     window.reseed = a => { Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
     window.reseed(seed);
-    localStorage.setItem('patience.v1', JSON.stringify({ stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 171000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } } }));
+    localStorage.setItem('patience.v1', JSON.stringify({ stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 300000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } } }));
   }, SEED);
   await page.goto(base);
   await page.evaluate(() => document.fonts.ready);

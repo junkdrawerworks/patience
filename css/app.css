@@ -630,6 +630,10 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
 @keyframes pop2 { from { opacity: 0; transform: translate(-50%, -46%); } }
 .won .panel h2 { font-size: 30px; margin-bottom: 6px; }
 .won .panel p { margin: 0 0 16px; color: var(--muted); text-wrap: balance; }
+/* A first win, the fastest yet or the best streak yet: said under the line, and its tile stands out. */
+.won .panel .news { margin-top: -10px; color: var(--accent); font-weight: 650; }
+.stats div.new { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.stats div.new dd { color: var(--accent); }
 
 /* Windows' contrast themes (forced colours) take away backgrounds and shadows, which is all the deck, a face-down card,
    an empty place or the hint's glow is drawn with. The cards keep their own colours, as the pictures they are; the empty
@@ -641,6 +645,7 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
   .card.hint .face, .card.hint .back, .spot.hint { outline: 3px solid Highlight; outline-offset: 1px; }
   .card.target .face, .spot.target { outline: 2px dashed Highlight; outline-offset: 1px; }
   .toast, .panel, .stats div { border: 1px solid CanvasText; }
+  .stats div.new { outline: 2px solid Highlight; outline-offset: -3px; }
   .choice.current { border-color: Highlight; outline: 1px solid Highlight; }
   /* The switches are drawn with backgrounds too. */
   .toggle input { forced-color-adjust: none; background: Canvas; box-shadow: inset 0 0 0 1.5px CanvasText; }
