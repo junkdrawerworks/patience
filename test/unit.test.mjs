@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { card, safeUp, stacks, fits, suitOf } from '../js/cards.js';
 import { deal, draw, move, canDrop, bestTarget, autoStep, won, finishable, finishStep, forSolver, fromSolver, easyHint, foundationFor, foundCounts, outOfMoves, deadEnd, TABLEAU, FOUNDATIONS } from '../js/games/klondike.js';
 import { solve, Search } from '../js/solvers/klondike.js';
-import { hintFor } from '../js/deals.js';
+import { hintFor, Dealer } from '../js/deals.js';
+import { FOUR_SUIT_DEALS } from '../js/games/spider-deals.js';
 
 const S = 0, H = 1, C = 2, D = 3;
 const top = a => a[a.length - 1];
@@ -289,4 +290,19 @@ test('a king with cards under it can still move to an empty column', () => {
   s.tab[3] = { down: [card(D, 12)], up: [card(C, 13)] };
   assert.equal(outOfMoves(s), false);
   assert.equal(solve(forSolver(s)).result, 'won');
+});
+
+test('four-suit Spider deals from the list checked in advance come round once each, kept in the save', async () => {
+  // With no checked deal ready, every New game takes one from the list. The page closes and opens part way through.
+  let dealer = new Dealer({});
+  dealer.prepare = () => {}; // no deal found in the background
+  const dealt = [];
+  for (let i = 0; i < FOUR_SUIT_DEALS.length; i++) {
+    if (i === 40) { dealer = new Dealer(JSON.parse(JSON.stringify(dealer.kept()))); dealer.prepare = () => {}; }
+    dealt.push(await dealer.take('s4'));
+  }
+  assert.equal(new Set(dealt).size, FOUR_SUIT_DEALS.length, 'none twice');
+  assert.ok(dealt.every(n => FOUR_SUIT_DEALS.includes(n)));
+  const next = await dealer.take('s4');
+  assert.ok(FOUR_SUIT_DEALS.includes(next) && next !== dealt.at(-1), 'then round again, not starting with the last one');
 });

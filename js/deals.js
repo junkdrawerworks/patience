@@ -3,6 +3,7 @@
 
 import { VARIANTS, gameOf } from './games/index.js';
 import { FOUR_SUIT_DEALS } from './games/spider-deals.js';
+import { shuffle } from './rng.js';
 
 // Run a search in slices of a few milliseconds. Resolves with the search once it knows,
 // or once it has looked at `max` positions. Each step is sized by how long the last one took, aiming at about 4 ms
@@ -52,15 +53,16 @@ export class Dealer {
     this.load(kept);
   }
 
-  // What the save keeps: the deal ready for each way of playing (k1: 123456, ...), and in `ways` the way through each,
-  // so Hint's first press on it needn't search again after the page is closed and opened.
+  // What the save keeps: the deal ready for each way of playing (k1: 123456, ...), in `ways` the way through each,
+  // so Hint's first press on it needn't search again after the page is closed and opened, and in `s4list` the
+  // four-suit deals checked in advance still to come (see take()).
   kept() {
     const ways = {};
     for (const [v, n] of Object.entries(this.ready)) {
       const path = this.ways.get(v + ':' + n);
       if (path) ways[v] = path;
     }
-    return { ...this.ready, ways };
+    return { ...this.ready, ways, s4list: this.s4list };
   }
 
   // Take up what the save kept (this page's, or another tab's), leaving out anything of the wrong shape. The first
@@ -72,6 +74,8 @@ export class Dealer {
       const path = isObj(kept.ways) && kept.ways[v];
       if (Array.isArray(path) && path.every(isObj)) this.ways.set(v + ':' + n, path);
     }
+    const list = Array.isArray(next?.s4list) ? next.s4list.filter(n => FOUR_SUIT_DEALS.includes(n)) : [];
+    this.s4list = [...new Set(list)];
   }
 
   // The way through a deal this Dealer found, found with cards going up by themselves on, once: after that it's Hint's.
@@ -96,13 +100,20 @@ export class Dealer {
   }
 
   // A deal number for a new game. Takes the one that's ready if there is one, and starts on the next.
-  // Four-suit Spider deals can take a while to check, so until one is ready it uses one checked in advance.
+  // Four-suit Spider deals can take a while to check, so until one is ready it uses one checked in advance: the next
+  // in a shuffled order of the list, so none comes round again until every one has been dealt (and then not straight
+  // after itself).
   async take(v) {
     let n = this.ready[v];
     if (n) {
       delete this.ready[v];
     } else if (v === 's4' && FOUR_SUIT_DEALS.length) {
-      n = FOUR_SUIT_DEALS[Math.floor(Math.random() * FOUR_SUIT_DEALS.length)];
+      if (!this.s4list.length) this.s4list = shuffle(FOUR_SUIT_DEALS.slice(), Math.random() * 2 ** 32);
+      n = this.s4list.shift();
+      if (!this.s4list.length) { // round again, in a new order that doesn't start with this one
+        this.s4list = shuffle(FOUR_SUIT_DEALS.slice(), Math.random() * 2 ** 32);
+        if (this.s4list.length > 1 && this.s4list[0] === n) this.s4list.push(this.s4list.shift());
+      }
     } else if (this.jobs[v]) {
       const job = this.jobs[v];
       job.claimed = true;
