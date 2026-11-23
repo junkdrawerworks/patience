@@ -2,7 +2,7 @@
 
 import { VARIANTS, gameOf, label } from './games/index.js';
 import { Table } from './table.js';
-import { Dealer, hintFor } from './deals.js';
+import { Dealer, hintFor, primeLine } from './deals.js';
 import { cascade } from './win.js';
 import { suitSprite } from './suits.js';
 import { shortName } from './cards.js';
@@ -209,6 +209,9 @@ function start(state, again) {
   if (again && counted) stopClock();
   else { elapsed = 0; since = 0; counted = false; }
   winCounted = false;
+  // A deal just checked comes with the way through, for Hint's first press (found with cards going up by themselves on).
+  const way = !again && dealer.pathFor(state.v, state.deal);
+  if (way && settings.auto) primeLine(state, way);
   table.render(game, { deal: true });
   showInfo();
   write();

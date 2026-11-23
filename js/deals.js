@@ -38,6 +38,14 @@ export class Dealer {
     this.jobs = {};
     this.onReady = onReady;
     this.busy = busy;
+    this.ways = new Map(); // 'v:deal' -> the way through the solver found, for Hint (see pathFor); not saved
+  }
+
+  // The way through a deal this Dealer found, found with cards going up by themselves on, once: after that it's Hint's.
+  pathFor(v, n) {
+    const key = v + ':' + n, path = this.ways.get(key);
+    this.ways.delete(key);
+    return path;
   }
 
   async find(v, job) {
@@ -46,7 +54,11 @@ export class Dealer {
     for (;;) {
       const n = game.randomDeal();
       const s = await think(game.search(game.deal(n, v)), game.budget.deal, wait);
-      if (s.result === 'won') return n;
+      if (s.result === 'won') {
+        this.ways.set(v + ':' + n, s.path);
+        while (this.ways.size > 12) this.ways.delete(this.ways.keys().next().value); // only the latest few
+        return n;
+      }
     }
   }
 
@@ -126,6 +138,15 @@ function follow(game, s, path, auto) {
     s = settle(game, next, auto);
   }
   return out;
+}
+
+// Start Hint off on a new deal with the way through found when the deal was checked, so its first press needn't search
+// again (which takes seconds for Spider on a slow phone). `state` is the deal as dealt; the way was found with cards
+// going up by themselves on, so it's kept only for that setting, like any other.
+export function primeLine(state, path) {
+  const game = gameOf(state);
+  line = follow(game, settle(game, state, true), path, true);
+  lineAuto = true;
 }
 
 // What to suggest from here, with cards going up by themselves or not (the setting). Resolves with one of:

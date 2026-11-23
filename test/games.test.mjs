@@ -7,7 +7,7 @@ import { freecell, room } from '../js/games/freecell.js';
 import { spider } from '../js/games/spider.js';
 import { VARIANTS } from '../js/games/index.js';
 import { FOUR_SUIT_DEALS } from '../js/games/spider-deals.js';
-import { hintFor } from '../js/deals.js';
+import { hintFor, primeLine, Dealer } from '../js/deals.js';
 
 const S = 0, H = 1, C = 2, D = 3;
 const name = c => 'A23456789TJQK'[rankOf(c) - 1] + 'SHCD'[suitOf(c)];
@@ -378,6 +378,34 @@ test('with no time to find a way through, Hint suggests the move that looked bes
     }
   } finally {
     Object.assign(spider.budget, { hint, all });
+  }
+});
+
+test('on a deal just checked, Hint starts from the way through found then, without searching again', async () => {
+  // Deals the test above follows with one search, so they're known to be won by the first search's way.
+  for (const [v, deal] of [['k3', 2096], ['fc', 1003], ['s2', 1001]]) {
+    const game = VARIANTS[v].game, search = game.search, randomDeal = game.randomDeal;
+    const dealer = new Dealer({});
+    game.randomDeal = () => deal;
+    const n = await dealer.find(v);
+    game.randomDeal = randomDeal;
+    let searches = 0;
+    game.search = (...args) => { searches++; return search(...args); };
+    try {
+      primeLine(game.deal(n, v), dealer.pathFor(v, n));
+      assert.equal(dealer.pathFor(v, n), undefined, 'the way is handed over once');
+      const settle = s => { for (let st; !game.won(s) && !game.finishable(s) && (st = game.autoStep(s));) s = game.move(s, st.from, st.n, st.to); return s; };
+      let s = settle(game.deal(n, v));
+      for (let i = 0; i < 1000 && !game.won(s) && !game.finishable(s); i++) {
+        const h = await hintFor(s);
+        assert.ok(h.move, `${v} deal ${n}: Hint said ${JSON.stringify(h)}`);
+        s = settle(h.move.stock ? game.stock(s) : game.move(s, h.move.from, h.move.n, h.move.to));
+      }
+      assert.ok(game.won(s) || game.finishable(s), `${v} deal ${n} not won`);
+      assert.equal(searches, 0, `${v} deal ${n}: Hint searched`);
+    } finally {
+      game.search = search;
+    }
   }
 });
 
