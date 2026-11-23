@@ -597,11 +597,11 @@ function showStats(v) {
   askNoMore();
   $('stats-for').value = v;
   $('stats').innerHTML = tiles([
-    ['Played', st.played],
-    ['Won', st.won],
+    ['Played', st.played.toLocaleString('en-US')],
+    ['Won', st.won.toLocaleString('en-US')],
     ['Win rate', st.played ? `${Math.round((100 * st.won) / st.played)}%` : '–'],
-    ['Streak', st.streak],
-    ['Best streak', st.best],
+    ['Streak', st.streak.toLocaleString('en-US')],
+    ['Best streak', st.best.toLocaleString('en-US')],
     ['Fastest', st.fastest ? clock(st.fastest) : '–'],
     ['Fewest moves', st.fewest ? st.fewest.toLocaleString('en-US') : '–'],
   ]);

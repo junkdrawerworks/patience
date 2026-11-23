@@ -1790,6 +1790,9 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     assert.equal(await tile('Fewest moves'), fewest, `after a win in ${moves + 1} moves`);
   }
   assert.equal(await pm.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).stats.k3.fewest), 90, 'and it is kept');
+  // Counts in the thousands have their comma, as the fewest moves beside them do.
+  await pm.evaluate(() => Object.assign(window.patience.stats.k3, { played: 1234, won: 1001, streak: 1000, best: 1200, fewest: 1112 }));
+  assert.deepEqual([await tile('Played'), await tile('Won'), await tile('Streak'), await tile('Best streak'), await tile('Fewest moves')], ['1,234', '1,001', '1,000', '1,200', '1,112']);
   await cm.close();
 }
 
