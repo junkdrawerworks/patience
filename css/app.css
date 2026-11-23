@@ -68,9 +68,11 @@
   }
 }
 
-:root[data-four] { --club: #18763a; --diamond: #2559bd; }
+/* Clubs a sea green that red-green colour-blind eyes still tell from hearts, and small text can be read in on the card
+   (at least 4.5:1); test/e2e.mjs checks both. */
+:root[data-four] { --club: #447b71; --diamond: #2559bd; }
 @media (prefers-color-scheme: dark) {
-  :root[data-four] { --club: #1d7a40; --diamond: #2f5fb8; }
+  :root[data-four] { --club: #3c6c63; --diamond: #2f5fb8; }
 }
 
 /* Asked for more contrast: the empty places and the deck's turn-over arrow stand out from the felt by 3:1 or more

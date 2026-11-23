@@ -363,6 +363,26 @@ const manifest = await page.evaluate(async () => (await (await fetch('manifest.w
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).description;
 assert.deepEqual([manifest, pkg], [og, og]);
 
+// Colours as the eye sees them: contrast(a, b) is WCAG's ratio of two '#rrggbb' colours, and seen(a, b, eyes) how far
+// apart they look in CIELAB (CIE76) with the Machado, Oliveira and Fernandes (2009) colour-blindness matrices at full
+// strength, applied to linear sRGB.
+const linear = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+const luminance = l => 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+const contrast = (a, b) => { const [x, y] = [luminance(linear(a)), luminance(linear(b))]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const MACHADO = {
+  protanopia: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+  deuteranopia: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]],
+};
+const lab = l => {
+  const f = t => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+  const [x, y, z] = [(0.4124 * l[0] + 0.3576 * l[1] + 0.1805 * l[2]) / 0.95047, luminance(l), (0.0193 * l[0] + 0.1192 * l[1] + 0.9505 * l[2]) / 1.08883].map(f);
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+};
+const seen = (a, b, eyes) => {
+  const [p, q] = [a, b].map(hex => lab(MACHADO[eyes].map(r => Math.min(1, Math.max(0, r.reduce((s, k, i) => s + k * linear(hex)[i], 0))))));
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+};
+
 // The deal's name and the clock at the top read clearly on the felt, at least 4.5:1, in both palettes.
 for (const colorScheme of ['light', 'dark']) {
   await page.emulateMedia({ colorScheme });
@@ -383,6 +403,16 @@ for (const colorScheme of ['light', 'dark']) {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
   });
   assert.ok(red >= 4.5, `red is ${red.toFixed(2)}:1 on a ${colorScheme} card`);
+  // With four-colour suits, clubs read on the card too, and red-green colour-blind eyes tell them from hearts: in the
+  // Machado, Oliveira and Fernandes (2009) simulation of protanopia and deuteranopia, they're at least 20 apart in CIELAB
+  // (about 2 is just noticeable).
+  await page.evaluate(() => document.documentElement.toggleAttribute('data-four', true));
+  const [card, heart, club] = await page.evaluate(() => ['--card', '--red', '--club'].map(v => getComputedStyle(document.documentElement).getPropertyValue(v).trim()));
+  await page.evaluate(() => document.documentElement.toggleAttribute('data-four', window.patience.settings.four));
+  assert.ok(contrast(club, card) >= 4.5, `four-colour clubs are ${contrast(club, card).toFixed(2)}:1 on a ${colorScheme} card`);
+  for (const eyes of ['protanopia', 'deuteranopia']) {
+    assert.ok(seen(club, heart, eyes) >= 20, `with ${eyes}, ${colorScheme} clubs and hearts are only ${seen(club, heart, eyes).toFixed(1)} apart`);
+  }
 }
 await page.emulateMedia({ colorScheme: 'light' });
 
