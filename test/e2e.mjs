@@ -1628,6 +1628,22 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cr.close();
 }
 
+// With a Windows contrast theme on (forced colours), which takes away backgrounds and shadows, the deck and the
+// face-down cards keep their backs, the empty places are outlined, and the switches in the menu can still be seen.
+{
+  const cc = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', forcedColors: 'active', colorScheme: 'dark' });
+  const pc = await cc.newPage();
+  await pc.goto(base);
+  await pc.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const look = await pc.evaluate(() => {
+    const css = el => getComputedStyle(el);
+    const back = document.querySelector('.card.down .back'), spot = document.querySelector('.spot[data-pile="f0"]'), sw = document.getElementById('o-auto');
+    return { back: css(back).forcedColorAdjust, spot: css(spot).outlineStyle, switch: css(sw).backgroundColor !== css(sw.closest('.panel')).backgroundColor };
+  });
+  assert.deepEqual(look, { back: 'none', spot: 'solid', switch: true });
+  await cc.close();
+}
+
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.
 {
   const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });

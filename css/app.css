@@ -621,6 +621,26 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
 .won .panel h2 { font-size: 30px; margin-bottom: 6px; }
 .won .panel p { margin: 0 0 16px; color: var(--muted); text-wrap: balance; }
 
+/* Windows' contrast themes (forced colours) take away backgrounds and shadows, which is all the deck, a face-down card,
+   an empty place or the hint's glow is drawn with. The cards keep their own colours, as the pictures they are; the empty
+   places, the hint and the boxes get outlines in the theme's own colours. */
+@media (forced-colors: active) {
+  .card { forced-color-adjust: none; }
+  .spot { forced-color-adjust: none; color: CanvasText; outline: 2px solid CanvasText; outline-offset: -2px; box-shadow: none; }
+  .spot[data-kind='stock'], .spot[data-kind='deals'], .spot[data-kind='stock'].gone { color: CanvasText; }
+  .card.hint .face, .card.hint .back, .spot.hint { outline: 3px solid Highlight; outline-offset: 1px; }
+  .card.target .face, .spot.target { outline: 2px dashed Highlight; outline-offset: 1px; }
+  .toast, .panel, .stats div { border: 1px solid CanvasText; }
+  .choice.current { border-color: Highlight; outline: 1px solid Highlight; }
+  /* The switches are drawn with backgrounds too. */
+  .toggle input { forced-color-adjust: none; background: Canvas; box-shadow: inset 0 0 0 1.5px CanvasText; }
+  .toggle input::after { background: CanvasText; box-shadow: none; }
+  .toggle input:checked { background: Highlight; box-shadow: none; }
+  .toggle input:checked::after { background: HighlightText; }
+  .toggle input:focus-visible { outline-color: Highlight; }
+  .bar button:focus-visible, .table:focus-visible { outline-color: Highlight; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .card, .card .flip { transition-duration: 0.01s; }
   .card.hint, .spot.hint { animation: none; }
