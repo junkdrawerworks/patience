@@ -657,6 +657,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p6.keyboard.press('Tab');
   assert.deepEqual(await p6.evaluate(() => [document.activeElement.id, document.activeElement.getAttribute('role'), document.activeElement.getAttribute('aria-label')]),
     ['table', 'group', 'Card table'], 'the first Tab goes to the table');
+  const ring = () => p6.evaluate(() => getComputedStyle(document.getElementById('table')).outlineStyle);
+  assert.equal(await ring(), 'solid', 'with a ring round it');
   await p6.keyboard.press('Tab');
   assert.equal(await p6.evaluate(() => document.activeElement.id), 'b-new');
   await p6.keyboard.press('h');
@@ -681,6 +683,13 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p6.keyboard.press('Enter');
   await ready();
   assert.deepEqual((await now()).tab[2].up.slice(-2), [34, 20], 'after Hint was clicked, Enter played its move');
+  // A click on the felt and a key after it leave no ring round the table: that's for focus the keyboard brought there.
+  const felt = await p6.locator('#table').boundingBox();
+  await p6.mouse.click(felt.x + felt.width / 2, felt.y + felt.height - 20);
+  await p6.keyboard.press('h');
+  await lit();
+  assert.equal(await p6.evaluate(() => document.activeElement.id), 'table');
+  assert.equal(await ring(), 'none', 'no ring after a click and a key');
 
   // Drawing for a card further down the deck, where only the deck lights up, Hint says which card, until the draw.
   // In deal 11705 the ace of hearts is the top card of the deck, and the ace of spades the 18th.

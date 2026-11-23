@@ -153,9 +153,10 @@ button { font: inherit; color: inherit; }
   touch-action: none;
   isolation: isolate; /* cards stack among themselves, under the sheets */
 }
-/* The table takes the keyboard's Space and Enter (app.js); a ring says so when Tab or Escape brought focus here. */
+/* The table takes the keyboard's Space and Enter (app.js); a ring says so when Tab or Escape brought focus here
+   (.keyed), not when a click did and a key was pressed after it. */
 .table:focus { outline: none; }
-.table:focus-visible { outline: 2px solid var(--glow); outline-offset: -4px; border-radius: 10px; }
+.table.keyed:focus-visible { outline: 2px solid var(--glow); outline-offset: -4px; border-radius: 10px; }
 /* Said in the middle of the felt while the first deal is still being shuffled. */
 .wait {
   position: absolute;
@@ -653,7 +654,7 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
   .toggle input:checked { background: Highlight; box-shadow: none; }
   .toggle input:checked::after { background: HighlightText; }
   .toggle input:focus-visible { outline-color: Highlight; }
-  .bar button:focus-visible, .table:focus-visible { outline-color: Highlight; }
+  .bar button:focus-visible, .table.keyed:focus-visible { outline-color: Highlight; }
 }
 
 @media (prefers-reduced-motion: reduce) {

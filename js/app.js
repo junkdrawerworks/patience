@@ -618,7 +618,12 @@ function closeSheets() {
   return open.length;
 }
 const sheetOpen = () => !!document.querySelector('.sheet:not([hidden])');
-function focusTable() { if (!sheetOpen() && $('won').hidden) table.el.focus({ preventScroll: true }); }
+// (Its ring shows only when the keyboard brought it there: a player who clicks and then presses H doesn't need one.)
+function focusTable() {
+  if (sheetOpen() || !$('won').hidden) return;
+  table.el.classList.toggle('keyed', byKey);
+  table.el.focus({ preventScroll: true });
+}
 
 // While a sheet or the won panel is open, the table, its buttons and any message behind it can't be reached.
 function modal() {
@@ -688,9 +693,12 @@ document.addEventListener('keydown', e => {
 // Whether the keyboard brought focus to where it is (Tab, or Escape closing a sheet). A button there takes Space and
 // Enter; a button that kept focus after a click or tap leaves Space to the deck, and Enter to the move Hint is showing.
 let byKey = false, keyFocus = false;
-document.addEventListener('pointerdown', () => { byKey = false; }, true);
+document.addEventListener('pointerdown', () => { byKey = false; table.el.classList.remove('keyed'); }, true);
 document.addEventListener('keydown', () => { byKey = true; }, true);
-document.addEventListener('focusin', () => { keyFocus = byKey; });
+document.addEventListener('focusin', e => {
+  keyFocus = byKey;
+  if (e.target === table.el) table.el.classList.toggle('keyed', byKey);
+});
 
 // ---- offline ----
 
