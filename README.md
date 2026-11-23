@@ -41,7 +41,7 @@ It's a static site: plain HTML, CSS and JavaScript, with no build step.
 npx serve .                       # or any static file server, then open the printed address
 npm install                       # once, for the bundler and the screenshot tool's PNG compressor
 npm test                          # the rules and the solvers in Node, then every game played in Chromium (needs Playwright)
-node tools/screenshots.mjs        # redraws docs/*.png and og.png
+node tools/screenshots.mjs        # redraws docs/*.png and og.png (--check lists any that no longer match, changing nothing)
 node tools/make-icons.mjs         # redraws the PNG icons from icon.svg
 npm run build                     # bundles everything into dist/patience.html, one file you can send around
 node dev/solver-check.mjs 200 3   # solves 200 Klondike deals drawing three, and replays every win through the rules

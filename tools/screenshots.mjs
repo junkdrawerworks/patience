@@ -1,11 +1,14 @@
 // Renders the README screenshots (docs/*.png) and the link preview (og.png):  node tools/screenshots.mjs
+// With --check it writes them to a folder of its own instead, and lists any that differ from the ones here, so you can
+// tell when the pictures no longer match the game.
 // Math.random is seeded, the deals are fixed, and the bouncing cards run on Playwright's clock rather than the real one,
 // so the same pictures come out every time.
 // Needs Playwright, and upng-js from `npm install`.
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { playInto } from '../dev/play.mjs';
@@ -25,13 +28,17 @@ const server = createServer(async (req, res) => {
 }).listen(0);
 const base = `http://localhost:${server.address().port}/`;
 const SEED = 4;
+const check = process.argv.includes('--check');
+const out = check ? await mkdtemp(join(tmpdir(), 'patience-shots-')) : root; // where the pictures go
+const written = [];
 const browser = await pw.chromium.launch();
-await mkdir(join(root, 'docs'), { recursive: true });
+await mkdir(join(out, 'docs'), { recursive: true });
 
 // Save a screenshot squeezed to a 256-colour palette, which keeps the files small.
-async function save(shot, path) {
+async function save(shot, name) {
   const img = UPNG.decode(shot);
-  await writeFile(path, Buffer.from(UPNG.encode(UPNG.toRGBA8(img), img.width, img.height, 256)));
+  await writeFile(join(out, name), Buffer.from(UPNG.encode(UPNG.toRGBA8(img), img.width, img.height, 256)));
+  written.push(name);
 }
 
 async function open(viewport, deviceScaleFactor, scheme = 'light') {
@@ -41,7 +48,9 @@ async function open(viewport, deviceScaleFactor, scheme = 'light') {
     // mulberry32; reseed() starts it again, for the bouncing cards (see bounce())
     window.reseed = a => { Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
     window.reseed(seed);
-    localStorage.setItem('patience.v1', JSON.stringify({ stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 300000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } } }));
+    // With "Only deal games that can be won" off, no deal is being found in the background (every deal here is chosen),
+    // so nothing else takes numbers from Math.random while the cards bounce.
+    localStorage.setItem('patience.v1', JSON.stringify({ settings: { winnable: false }, stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 300000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } } }));
   }, SEED);
   await page.goto(base);
   await page.evaluate(() => document.fonts.ready);
@@ -68,7 +77,7 @@ async function bounce(page, win, ms) {
 // Phone screenshots for the README.
 {
   const page = await open({ width: 390, height: 844 }, 2);
-  const shot = async name => save(await page.screenshot(), join(root, `docs/${name}.png`));
+  const shot = async name => save(await page.screenshot(), `docs/${name}.png`);
   const fresh = async (v, n) => { await page.evaluate(([v, n]) => window.patience.newGame(v, n), [v, n]); await page.waitForTimeout(2200); };
 
   // Klondike part way, with a hint lit up.
@@ -130,10 +139,21 @@ async function bounce(page, win, ms) {
   <div class="words"><h1>Patience</h1><p>Klondike, FreeCell and Spider with no ads. Every deal can be won, and it works offline.</p></div>
   <img src="data:image/png;base64,${shot}">`);
   await card.evaluate(() => document.fonts.ready);
-  await save(await card.screenshot(), join(root, 'og.png'));
+  await save(await card.screenshot(), 'og.png');
   await card.close();
 }
 
 await browser.close();
 server.close();
-console.log('screenshots written');
+if (check) {
+  const differ = [];
+  for (const name of written) {
+    const here = await readFile(join(root, name)).catch(() => null);
+    if (!here || !here.equals(await readFile(join(out, name)))) differ.push(name);
+  }
+  if (differ.length) console.log(`these differ from the ones here (the new ones are in ${out}):\n  ${differ.join('\n  ')}`);
+  else { console.log(`all ${written.length} pictures match`); await rm(out, { recursive: true }); }
+  process.exitCode = differ.length ? 1 : 0;
+} else {
+  console.log('screenshots written');
+}

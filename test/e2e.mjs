@@ -39,6 +39,31 @@ await page.goto(base);
 await page.evaluate(() => document.fonts.ready);
 await settled();
 
+// It can be installed: Chromium finds nothing in the way, the manifest has no errors, and every icon it lists is there,
+// as big as it says.
+{
+  const cdp = await ctx.newCDPSession(page);
+  assert.deepEqual((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors, [], 'what stops it installing');
+  const { errors, url } = await cdp.send('Page.getAppManifest');
+  assert.equal(url, base + 'manifest.webmanifest');
+  assert.deepEqual(errors, [], 'errors in the manifest');
+  await cdp.detach();
+  const icons = await page.evaluate(async () => {
+    const { icons } = await (await fetch('manifest.webmanifest')).json();
+    return Promise.all(icons.map(async ({ src, sizes, type }) => {
+      const r = await fetch(src, { cache: 'no-store' });
+      const blob = r.ok ? await r.blob() : null;
+      const img = blob && type !== 'image/svg+xml' ? await createImageBitmap(blob) : null;
+      return { src, sizes, status: r.status, size: img ? `${img.width}x${img.height}` : 'any' };
+    }));
+  });
+  assert.ok(icons.length >= 3, 'icons listed');
+  for (const icon of icons) {
+    assert.equal(icon.status, 200, `${icon.src} is there`);
+    assert.equal(icon.size, icon.sizes, `${icon.src} is as big as it says`);
+  }
+}
+
 // A winnable deal comes up on its own.
 let s = await state();
 assert.equal(await page.locator('.card').count(), 52);
@@ -1896,6 +1921,72 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ca.close();
 }
 
+// The three settings the rest of these checks leave on, each turned off and on again. With "Only deal games that can
+// be won" off, a new game is dealt at once, whatever the deal: drawing one with the random numbers giving deal 1 first,
+// which the solver can't win in time. Back on, the deal is one the solver wins. With "Show time and moves" off, the time
+// and moves at the top go. With "Send cards up by themselves" off, an ace on top of a column stays there (FreeCell game
+// 617 with its ace of spades moved to the top of the first column), and switched back on, it goes up.
+{
+  const { klondike } = await import('../js/games/klondike.js');
+  const co = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  const po = await co.newPage();
+  const errors = [];
+  po.on('pageerror', e => errors.push(e.message));
+  await po.addInitScript(() => {
+    window.queued = [];
+    const random = Math.random;
+    Math.random = () => (window.queued.length ? window.queued.shift() : random());
+    addEventListener('click', e => { if (e.target.closest('.choice[data-v="k1"]')) window.queued = [0.5 / 999999]; }, true);
+  });
+  await po.goto(base);
+  const landed = () => po.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await landed();
+  const toggle = async id => { await po.click('#b-menu'); await po.click(`label:has(#${id})`); await po.click('#sheet-menu .close'); };
+  const dealK1 = async () => {
+    const before = await po.evaluate(() => window.patience.state);
+    await po.click('#b-new');
+    await po.click('.choice[data-v="k1"]');
+    await po.waitForFunction(b => window.patience.state !== null && JSON.stringify(window.patience.state) !== b, JSON.stringify(before), { timeout: 15000 });
+    await landed();
+    return po.evaluate(() => window.patience.state.deal);
+  };
+
+  await toggle('o-winnable');
+  assert.equal(await po.evaluate(() => window.patience.settings.winnable), false);
+  assert.equal(await dealK1(), 1, 'with the setting off, the first deal the random numbers give');
+  await toggle('o-winnable');
+  const n = await dealK1();
+  assert.notEqual(n, 1);
+  assert.equal(klondike.search(klondike.deal(n, 'k1')).run(klondike.budget.deal), 'won', `back on, deal ${n} can be won`);
+
+  assert.equal(await po.isVisible('#clock'), true);
+  await toggle('o-clock');
+  assert.equal(await po.isHidden('#clock'), true, 'the time and moves go');
+  await po.reload();
+  await landed();
+  assert.equal(await po.isHidden('#clock'), true, 'and stay gone');
+  await toggle('o-clock');
+  assert.equal(await po.isVisible('#clock'), true, 'and come back');
+
+  await toggle('o-auto');
+  await po.evaluate(async () => {
+    const { freecell } = await import('./js/games/freecell.js');
+    const s = freecell.deal(617, 'fc');
+    const tab = s.tab.map(col => col.filter(c => c !== 0));
+    tab[0].push(0);
+    window.patience.load({ ...s, tab, moves: 3 });
+  });
+  await po.waitForTimeout(1200);
+  let fc = await po.evaluate(() => window.patience.state);
+  assert.deepEqual([fc.tab[0].at(-1), fc.found.flat()], [0, []], 'with the setting off, the ace stays on its column');
+  await toggle('o-auto');
+  await po.waitForFunction(() => window.patience.state.found.flat().includes(0), null, { timeout: 5000 });
+  fc = await po.evaluate(() => window.patience.state);
+  assert.notEqual(fc.tab[0].at(-1), 0, 'switched back on, it goes up');
+  assert.deepEqual(errors, [], 'errors turning the settings off and on');
+  await co.close();
+}
+
 // Opened for the first time, the first deal is on the table at once, from the list of deals checked in advance, and so
 // is the first game of every other way of playing picked from the New sheet: no "Shuffling" line, ever. The random
 // numbers are fixed so that the first few deals tried can't be won, which took a few seconds drawing three.
@@ -2001,7 +2092,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
-// set it serves the next release. The server's own switches are needed because the browser's offline switch can't
+// set to 1 it serves the next release as most are, with only FILES changed in sw.js, and set to 2 the one after,
+// with the cache's name bumped too. The server's own switches are needed because the browser's offline switch can't
 // make a stall, and in some Chromium builds it doesn't stop the service worker's own requests.
 {
   const { createServer } = await import('node:http');
@@ -2011,7 +2103,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   const { createHash } = await import('node:crypto');
   const root = fileURLToPath(new URL('..', import.meta.url));
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.mp3': 'audio/mpeg', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
-  let net = 'up', release = false;
+  let net = 'up', release = 0;
   const held = [];
   const server = createServer((req, res) => {
     if (net === 'down') { req.socket.destroy(); return; }
@@ -2023,8 +2115,9 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     if (path.endsWith('/')) path += 'index.html';
     let body;
     try { body = await readFile(join(root, path)); } catch { res.writeHead(404); res.end(); return; }
-    if (release && path === '/sw.js') body = Buffer.from(String(body).replace(/const FILES = '[0-9a-f]*'/, "const FILES = 'next'").replace(/const CACHE = '[^']*'/, "const CACHE = 'patience-v999'"));
-    if (release && path === '/index.html') body = Buffer.concat([body, Buffer.from('<!-- the next release -->\n')]);
+    if (release && path === '/sw.js') body = Buffer.from(String(body).replace(/const FILES = '[0-9a-f]*'/, `const FILES = 'next${release}'`));
+    if (release === 2 && path === '/sw.js') body = Buffer.from(String(body).replace(/const CACHE = '[^']*'/, "const CACHE = 'patience-v999'"));
+    if (release && path === '/index.html') body = Buffer.concat([body, Buffer.from(`<!-- release ${release} -->\n`)]);
     const etag = `"${createHash('sha1').update(body).digest('hex').slice(0, 16)}"`;
     const head = { etag, 'cache-control': 'max-age=600', 'content-type': TYPES[extname(path)] || 'text/html' };
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); res.end(); return; }
@@ -2047,17 +2140,21 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.ok(asked.has('js/app.js') && asked.has('js/games/spider.js'), 'every file the page loads is seen');
   assert.deepEqual([...asked].filter(f => !shell.includes(f)), [], 'files the page loads that the offline copy leaves out');
   const title = await page.title();
-  const dealt = () => page.waitForFunction(() => window.patience?.state && document.querySelectorAll('.card').length === 52, null, { timeout: 15000 });
+  const dealt = () => page.waitForFunction(() => window.patience?.state && document.querySelectorAll('.card').length === (window.patience.state.v[0] === 's' ? 104 : 52), null, { timeout: 15000 });
 
-  // Works offline once it has been opened, and deals a game there.
+  // Works offline once it has been opened, and deals a game there, in every game, and Hint answers.
   net = 'down';
   await ctx.setOffline(true);
   await page.reload();
   assert.equal(await page.title(), title, 'the page did not open offline');
   await dealt();
-  await page.evaluate(() => window.patience.newGame('fc'));
-  await page.waitForFunction(() => window.patience.state.v === 'fc' && !window.patience.busy, null, { timeout: 15000 });
-  await dealt();
+  for (const v of ['fc', 's2', 's4']) {
+    await page.evaluate(v => window.patience.newGame(v), v);
+    await page.waitForFunction(v => window.patience.state.v === v && !window.patience.busy, v, { timeout: 15000 });
+    await dealt();
+    await page.click('#b-hint');
+    await page.waitForSelector('.hint', { timeout: 30000 });
+  }
   await ctx.setOffline(false);
 
   // On a connection that's up but not answering, it opens from the copy too, after the worker's few seconds' wait for
@@ -2073,19 +2170,25 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   for (const [req, res] of held.splice(0)) serve(req, res);
 
   // A new release: every file in the new copy comes from the server, though the browser still has its own copies of
-  // the old ones for ten minutes. (The next release changes index.html, and so FILES in sw.js, as a real one does; this
-  // one bumps the cache's name too.) The old copies go, and a cache that isn't the app's own is left alone.
+  // the old ones for ten minutes. The usual release changes index.html, and so FILES in sw.js, and keeps the cache's
+  // name: the copy is made again in the same cache. The next bumps the cache's name too. Each time the old copies go,
+  // and a cache that isn't the app's own is left alone.
   const before = await page.evaluate(async () => { await caches.open('patience-v1'); await caches.open('someone-else'); return caches.keys(); });
-  assert.ok(before.some(k => /^patience-v[0-9]+$/.test(k) && k !== 'patience-v1'), 'the offline copy is kept in a cache named patience-v and a number');
-  release = true;
-  await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
-  for (const end = Date.now() + 10000; !(await page.evaluate(async () => !!(await (await caches.match('index.html'))?.text())?.includes('<!-- the next release -->')));) {
-    assert.ok(Date.now() < end, "the new release's offline copy kept the old index.html");
-    await new Promise(r => setTimeout(r, 100));
-  }
-  for (const end = Date.now() + 10000; (await page.evaluate(() => caches.keys())).sort().join() !== 'patience-v999,someone-else';) {
-    assert.ok(Date.now() < end, `caches after the release: ${await page.evaluate(() => caches.keys())}`);
-    await new Promise(r => setTimeout(r, 100));
+  const named = before.find(k => /^patience-v[0-9]+$/.test(k) && k !== 'patience-v1');
+  assert.ok(named, 'the offline copy is kept in a cache named patience-v and a number');
+  for (const [r, kept] of [[1, named], [2, 'patience-v999']]) {
+    release = r;
+    await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+    for (const end = Date.now() + 10000; !(await page.evaluate(async r => !!(await (await caches.match('index.html'))?.text())?.includes(`<!-- release ${r} -->`), r));) {
+      assert.ok(Date.now() < end, `release ${r}: the offline copy kept the old index.html`);
+      await new Promise(r => setTimeout(r, 100));
+    }
+    for (const end = Date.now() + 10000; (await page.evaluate(() => caches.keys())).sort().join() !== [kept, 'someone-else'].sort().join();) {
+      assert.ok(Date.now() < end, `caches after release ${r}: ${await page.evaluate(() => caches.keys())}`);
+      await new Promise(r => setTimeout(r, 100));
+    }
+    const copy = await page.evaluate(async ([kept, r]) => !!(await (await (await caches.open(kept)).match('index.html'))?.text())?.includes(`<!-- release ${r} -->`), [kept, r]);
+    assert.ok(copy, `release ${r}: the new index.html is in ${kept}`);
   }
   assert.deepEqual(problems, [], 'problems while offline or on a stalled connection');
   await ctx.close();
