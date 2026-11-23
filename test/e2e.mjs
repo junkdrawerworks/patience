@@ -958,6 +958,37 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ct.close();
 }
 
+// Hint on a deal that can't be won as dealt (FreeCell game 11982, dealt with "Only deal games that can be won" off) says
+// so, with New game and no Undo, as there's nothing to undo. After a move, it offers Undo as well.
+{
+  const cl = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const pl = await cl.newPage();
+  const errors = [];
+  pl.on('pageerror', e => errors.push(e.message));
+  const ready = () => pl.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pl.goto(base);
+  await ready();
+  await pl.evaluate(() => { window.patience.settings.winnable = false; return window.patience.newGame('fc', 11982); });
+  await pl.waitForTimeout(1500);
+  await ready();
+  await pl.click('#b-hint');
+  await pl.waitForSelector('#toast:not([hidden])', { timeout: 30000 });
+  assert.equal(await pl.textContent('#toast-words'), 'Looks like this deal can’t be won, however it’s played.');
+  assert.deepEqual(await pl.locator('#toast button').allTextContents(), ['New game']);
+  await pl.click('#toast button:text("New game")');
+  assert.equal(await pl.isHidden('#sheet-new'), false, 'New game opens the sheet');
+  await pl.keyboard.press('Escape');
+  await pl.click('.card[data-c="38"]', { position: { x: 12, y: 10 } }); // the king of clubs, to a free cell
+  await ready();
+  assert.equal((await pl.evaluate(() => window.patience.state)).moves, 1);
+  await pl.click('#b-hint');
+  await pl.waitForSelector('#toast:not([hidden])', { timeout: 30000 });
+  assert.match(await pl.textContent('#toast-words'), /no way to win from here/);
+  assert.deepEqual(await pl.locator('#toast button').allTextContents(), ['Undo', 'New game']);
+  assert.deepEqual(errors, [], 'errors on a deal that can’t be won');
+  await cl.close();
+}
+
 // A second press of Hint while it's still thinking about the first isn't lost when the cards move in between: it
 // answers for the table as it is then. Four-suit Spider deal 35 takes the solver about 100,000 positions.
 {

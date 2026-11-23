@@ -299,7 +299,10 @@ async function hint() {
     // (That note is read out as it shows, so the line a screen reader reads says nothing more.)
     if (h.move.c !== undefined) drawFor(h.move.c);
     else { table.showHint(h.move); say(hintWords(G(), game, h.move)); }
-  } else if (h.lost) toast('Looks like there’s no way to win from here. Undo a few moves to try another way.', [['Undo', undo]]);
+  } else if (h.lost && !history.length) {
+    // As dealt, with nothing to undo. (Looks like: Klondike's first search can stand, so it isn't always proven.)
+    toast('Looks like this deal can’t be won, however it’s played.', [['New game', openNew]]);
+  } else if (h.lost) toast('Looks like there’s no way to win from here. Undo a few moves to try another way.', [['Undo', undo], ['New game', openNew]]);
   else toast('There are no moves left.', [['New game', openNew]]);
 }
 
