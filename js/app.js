@@ -295,7 +295,7 @@ function victory() {
   showInfo(); // the last cards may have gone up by themselves; Undo goes off
   const st = stats[game.v];
 
-  $('won-line').textContent = `${label(game.v)}, deal ${game.deal.toLocaleString('en-US')}, in ${clock(elapsed)} and ${plural(game.moves, 'move')}.`;
+  $('won-line').textContent = `${label(game.v)}, deal\u00a0${game.deal.toLocaleString('en-US')}, in ${clock(elapsed)} and ${plural(game.moves, 'move')}.`;
   $('won-stats').innerHTML = tiles([
     ['Won', `${st.won} of ${st.played}`],
     ['Streak', st.streak],
