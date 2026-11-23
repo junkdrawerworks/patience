@@ -98,6 +98,10 @@
       </select>
       <dl class="stats" id="stats"></dl>
       <p class="note" id="unkept" hidden>This browser isn't keeping your games, so your record won't be here next time.</p>
+      <div class="record-acts">
+        <button type="button" class="small-plain" id="b-clear">Clear this record</button>
+        <p class="ask" id="clear-ask" hidden><span id="clear-q"></span> <button type="button" class="small-plain" id="b-clear-yes">Clear it</button><button type="button" class="small-plain" id="b-clear-no">Keep it</button></p>
+      </div>
 
       <h3>Settings</h3>
       <label class="toggle"><input type="checkbox" id="o-winnable" aria-labelledby="o-winnable-name" aria-describedby="o-winnable-says"><span><b id="o-winnable-name">Only deal games that can be won</b> <span id="o-winnable-says">Each deal is played out first, so there's always a way through.</span></span></label>

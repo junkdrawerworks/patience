@@ -589,6 +589,7 @@ function tiles(list, hot) {
 
 function showStats(v) {
   const st = stats[v];
+  askNoMore();
   $('stats-for').value = v;
   $('stats').innerHTML = tiles([
     ['Played', st.played],
@@ -787,6 +788,33 @@ function openMenu(howto) {
 }
 $('b-restart').addEventListener('click', restart);
 $('stats-for').addEventListener('change', e => showStats(e.target.value));
+
+// Clear this record: it asks once, in place ('Clear your FreeCell record? This can't be undone.'), and then the way of
+// playing chosen above the record starts again from nothing. A game of it part way through counts again from its next
+// move, as a game played.
+$('b-clear').addEventListener('click', () => {
+  $('clear-q').textContent = `Clear your ${label($('stats-for').value)} record? This can’t be undone.`;
+  $('b-clear').hidden = true;
+  $('clear-ask').hidden = false;
+  $('b-clear-no').focus({ preventScroll: true });
+});
+$('b-clear-no').addEventListener('click', () => askNoMore(true));
+$('b-clear-yes').addEventListener('click', () => {
+  const v = $('stats-for').value;
+  Object.assign(stats[v], blank());
+  if (game?.v === v) counted = false;
+  if (waiting[v]) waiting[v] = { ...waiting[v], counted: false };
+  write();
+  showStats(v);
+  askNoMore(true);
+  say(`Your ${label(v)} record is cleared.`);
+});
+// Put Clear this record's question away; `focus`: back to the button.
+function askNoMore(focus) {
+  $('clear-ask').hidden = true;
+  $('b-clear').hidden = false;
+  if (focus) $('b-clear').focus({ preventScroll: true });
+}
 document.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => newGame(b.dataset.v)));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
 

@@ -1793,6 +1793,55 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cm.close();
 }
 
+// Clear this record asks once, in place, and Keep it leaves the record as it was. Clear it clears the record of the way
+// chosen above it and no other, and the game of that way part way through counts again from its next move.
+{
+  const cc = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const pc = await cc.newPage();
+  await pc.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider'], stats: {
+      k1: { played: 30, won: 20, streak: 3, best: 6, fastest: 200000, fewest: 95 },
+      fc: { played: 5, won: 4, streak: 4, best: 4, fastest: 180000, fewest: 80 },
+    } }));
+  });
+  const ready = () => pc.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pc.goto(base);
+  await ready();
+  await pc.evaluate(() => window.patience.newGame('k1', 11705));
+  await pc.waitForTimeout(1500);
+  await ready();
+  await pc.click('.spot[data-pile="stock"]', { force: true });
+  await ready();
+  const k1 = await pc.evaluate(() => ({ ...window.patience.stats.k1 }));
+  assert.equal(k1.played, 31);
+  await pc.click('#b-menu');
+  assert.equal(await pc.inputValue('#stats-for'), 'k1');
+  await pc.click('#b-clear');
+  assert.equal(await pc.textContent('#clear-q'), 'Clear your Klondike, draw one record? This can’t be undone.');
+  assert.equal(await pc.isHidden('#b-clear'), true);
+  assert.equal(await pc.evaluate(() => document.activeElement.id), 'b-clear-no', 'Keep it has focus');
+  await pc.click('#b-clear-no');
+  assert.deepEqual(await pc.evaluate(() => window.patience.stats.k1), k1, 'Keep it keeps it');
+  assert.equal(await pc.isHidden('#clear-ask'), true);
+  await pc.click('#b-clear');
+  await pc.selectOption('#stats-for', 'fc');
+  assert.equal(await pc.isHidden('#clear-ask'), true, 'the question goes with a change of record');
+  await pc.selectOption('#stats-for', 'k1');
+  await pc.click('#b-clear');
+  await pc.click('#b-clear-yes');
+  assert.deepEqual(await pc.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 0, best: 0, fastest: 0, fewest: 0 });
+  assert.equal(await pc.evaluate(() => document.querySelector('#stats div dd').textContent), '0', 'the tiles show it');
+  assert.equal(await pc.evaluate(() => window.patience.stats.fc.won), 4, 'the FreeCell record is as it was');
+  assert.equal(await pc.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).stats.k1.played), 0, 'and saved');
+  await pc.keyboard.press('Escape');
+  await pc.click('.spot[data-pile="stock"]', { force: true });
+  await ready();
+  assert.equal(await pc.evaluate(() => window.patience.stats.k1.played), 1, 'the game in play counts again');
+  await cc.close();
+}
+
 // Two tabs on different ways of playing: each follows the other, onto the game it carries on with, and the game it
 // leaves waits, with nothing counted twice.
 {

@@ -659,6 +659,13 @@ button { font: inherit; color: inherit; }
 #stats { grid-template-columns: repeat(12, 1fr); }
 #stats div { grid-column: span 3; padding-inline: 4px; }
 #stats div:nth-child(n + 5) { grid-column: span 4; }
+/* Under the record: Clear this record, which asks once, in place, before it clears. */
+.record-acts { margin-top: 8px; }
+.record-acts .small-plain { margin: 0 0 0 -10px; }
+.ask { margin: 0; color: var(--ink); font-size: 14.5px; line-height: 1.45; }
+.ask span { display: block; margin-bottom: 4px; }
+.ask .small-plain { margin: 0 0 0 -10px; }
+.ask .small-plain + .small-plain { margin-left: 6px; }
 
 .toggle { display: flex; gap: 12px; align-items: flex-start; padding: 9px 0; font-size: 14.5px; line-height: 1.4; color: var(--muted); cursor: pointer; }
 .toggle span { text-wrap: balance; }
