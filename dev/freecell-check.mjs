@@ -1,10 +1,12 @@
 // Solves FreeCell deals and replays every win move by move with its own simple rule checks.
 //   node dev/freecell-check.mjs [deals] [max positions] [first deal]
+// The limit is the one the game checks a deal with before it reaches you, unless you give another.
 import { freecellDeal } from '../js/rng.js';
+import { freecell } from '../js/games/freecell.js';
 import { FreeCellSearch } from '../js/solvers/freecell.js';
 import { suitOf, rankOf, stacks, fits } from '../js/cards.js';
 
-const N = +(process.argv[2] || 100), MAX = +(process.argv[3] || 200000), FIRST = +(process.argv[4] || 1);
+const N = +(process.argv[2] || 100), MAX = +(process.argv[3] || freecell.budget.deal), FIRST = +(process.argv[4] || 1);
 const top = a => a[a.length - 1];
 
 function position(n) {

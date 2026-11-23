@@ -58,14 +58,19 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `js/games/`: the rules of each game, all with the same parts so the rest of the app doesn't need to know which is being played (`index.js` lists them and what each part does). `spider-deals.js` is the list of four-suit Spider deals checked in advance.
 - `js/solvers/klondike.js`: the Klondike solver. A depth-first search that sees the face-down cards, offers every card the stock can reach as a move of its own, and never looks at the same position twice. Drawing three, it allows for a card going up by itself from the waste, which changes what later draws turn over, so a deal it hands out can be won with that setting on or off. To be quick it leaves out moves that seldom help, like moving part of a run or taking a card back down, so before Hint says a game can't be won, or the game says there are no moves left, it looks again with every move. In the 100,000 positions it gets to check a deal before it reaches you, it wins about 79% of deals drawing one and 68% drawing three.
 - `js/solvers/best-first.js`: a best-first search shared by the FreeCell and Spider solvers, which always looks next at the most promising position found so far.
-- `js/solvers/freecell.js`: the FreeCell solver. It wins 99 of the first 100 Windows deals in about a tenth of a second each, and proves game 11982, the famous one, can't be won.
+- `js/solvers/freecell.js`: the FreeCell solver. In the 100,000 positions it gets to check a deal before it reaches you, it wins 98 of the first 100 Windows deals in about a tenth of a second each (99 in the 200,000 Hint gets), and proves game 11982, the famous one, can't be won.
 - `js/solvers/spider.js`: the Spider solver. In the 120,000 positions it gets to check a deal before it reaches you, it wins nearly every one-suit deal and nine in ten two-suit deals; four-suit deals are harder, about one in four. To be quick it leaves out moves that seldom help, like moving only part of a run, so before Hint says a game can't be won it looks again with every move.
 - `js/deals.js`: runs a solver a slice at a time, between frames, to find winnable deals and hints.
 - `js/table.js`: the table. Card sizes and layout for whichever game it is, the movement, tapping and dragging.
 - `js/win.js`: the bouncing cards.
+- `js/edge-guard.js`: keeps a Back that comes in the middle of a drag (a swipe near the side of a phone's screen) from closing the game.
 - `js/app.js`: the game itself: undo, the clock, the record, settings and saving.
 - `js/cards.js`, `js/suits.js`, `js/rng.js`: the cards, the four suit shapes, the seeded shuffle that turns a deal number into a deal, and Windows' FreeCell shuffle.
+- `carry.js`: brings your game and record over from the old address, junkdrawer.works/patience/, the first time you open it here, and does nothing anywhere else.
 - `fonts/`: Fraunces and Figtree (SIL Open Font License), served from here so nothing loads from elsewhere.
 - `sw.js`: keeps a copy for playing offline. On a connection that isn't answering, a page opens from that copy after four seconds. `FILES` in it is a fingerprint of the files it keeps: change one and `npm test` says what to set it to, so a release never leaves the copy half old.
 - `test/`: the rules and the solvers in Node, and every game played through the real page.
+- `scripts/build.mjs`: makes dist/patience.html, the one file you can send around (and dist/artifact.html, the same without the page around it, for places that supply their own).
+- `tools/`: redraws the screenshots, the link preview and the icons.
 - `dev/`: tools used while building it: the solver and Hint checks, quick screenshots, and a helper that plays a deal part way.
+- `LICENSE`: MIT, so you can take it and make it your own.
