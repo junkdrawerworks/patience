@@ -36,6 +36,9 @@ const settings = settingsOf(saved.settings);
 const stats = Object.fromEntries(Object.keys(VARIANTS).map(v => [v, record(saved.stats?.[v])]));
 // The games this phone has said its first word on (see firstWord()): 'klondike', 'freecell', 'spider'.
 const introduced = new Set(Array.isArray(saved.introduced) ? saved.introduced.filter(g => typeof g === 'string') : []);
+// The game waiting for each other way of playing, put aside to play another (see newGame()), by way of playing:
+// { state, history, elapsed, counted }, as saved. The game on the table isn't in it.
+const waiting = {};
 
 let game = null;      // where the cards are now
 let history = [];     // where they were before each move, for Undo
@@ -240,7 +243,10 @@ function undo() {
   say('Undone.');
 }
 
+// A new game of way `v` (deal `number`, or the next one). Another way of playing, with a game waiting for it, carries on
+// with that game instead, unless a deal is asked for by its number.
 async function newGame(v, number) {
+  if (number === undefined && game && v !== game.v && waiting[v]) { carryOn(v); return; }
   const ticket = ++dealing;
   // Chosen from a sheet or the won panel, the table takes focus, so the keyboard's Space and Enter play the new deal.
   if (closeSheets() + closeWon()) focusTable();
@@ -264,10 +270,48 @@ async function newGame(v, number) {
   const n = number ?? (settings.winnable ? await dealer.take(v) : g.randomDeal());
   if (ticket !== dealing) return; // another game was chosen while this one was being shuffled
   clearTimeout(slow);
-  // Leaving a game part way counts as a loss. Not until the new deal is here: a page closed while it's still being
-  // shuffled opens on the same game again, which isn't lost.
-  if (inPlay()) stats[game.v].streak = 0;
+  // A new deal counts the game of the same way it replaces as a loss, if it was part way. A game of another way goes
+  // aside, to carry on with later. Not until the new deal is here: a page closed while it's still being shuffled opens
+  // on the same game again, which isn't lost.
+  if (game?.v === v) { if (inPlay()) stats[v].streak = 0; }
+  else {
+    if (waiting[v]?.counted) stats[v].streak = 0; // only when a deal of it is asked for by number
+    delete waiting[v];
+    putAside();
+  }
   start(g.deal(n, v));
+}
+
+// The game on the table goes aside, Undo, clock and all, until its way of playing is chosen again. A game won is over,
+// and doesn't.
+function putAside() {
+  if (!game || over()) return;
+  stopClock();
+  waiting[game.v] = { state: game, history: history.slice(-2000), elapsed, counted };
+}
+
+// Back to the game waiting for way `v`, as it was left, and the one on the table goes aside.
+function carryOn(v) {
+  dealing++; // a deal still being shuffled isn't wanted now
+  if (closeSheets() + closeWon()) focusTable();
+  hideToast();
+  cancelChain();
+  clearTimeout(landed);
+  clearTimeout(slow);
+  busy(false);
+  table.clearHint();
+  putAside();
+  const g = waiting[v];
+  delete waiting[v];
+  settings.variant = v;
+  news = null;
+  winNews = null;
+  liftNoted = false;
+  take(g);
+  write();
+  say(`${label(v)}, deal ${game.deal.toLocaleString('en-US')}, as you left it.`);
+  after();
+  if (settings.winnable) dealer.prepare(v);
 }
 
 function restart() {
@@ -566,31 +610,51 @@ function read(text) {
   let s = null;
   try { s = JSON.parse(text); } catch { /* none, or not readable */ }
   if (!isObj(s)) return {};
-  for (const k of ['settings', 'stats', 'next', 'game']) if (!isObj(s[k]) && !(k === 'game' && s[k] === null)) delete s[k];
+  for (const k of ['settings', 'stats', 'next', 'games']) if (!isObj(s[k])) delete s[k];
   if (!Array.isArray(s.introduced)) delete s.introduced;
   // The first version only played Klondike, and kept the draw count where the way of playing now goes.
   if (s.settings && !s.settings.variant && s.settings.draw) s.settings.variant = 'k' + s.settings.draw;
   if (s.stats?.[1] || s.stats?.[3]) { s.stats.k1 ??= s.stats[1]; s.stats.k3 ??= s.stats[3]; }
-  if (s.game) { s.game.state = upgrade(s.game.state); s.game.history = (Array.isArray(s.game.history) ? s.game.history : []).map(upgrade); }
+  // Saves before November 2026 kept one game, under `game` (null once it was won): it's the game of its way of playing.
+  if (!s.games && isObj(s.game)) {
+    const g = { ...s.game, state: upgrade(s.game.state), history: (Array.isArray(s.game.history) ? s.game.history : []).map(upgrade) };
+    if (typeof g.state?.v === 'string') s.games = { [g.state.v]: g };
+  }
+  s.games ??= {};
+  delete s.game;
   return s;
 }
+
+// The games waiting don't change while they wait, so each is made into text once, not at every move.
+const texts = new WeakMap();
+const textOf = g => { let t = texts.get(g); if (t === undefined) texts.set(g, (t = JSON.stringify(g))); return t; };
 
 function write() {
   let ok = false;
   try {
     // The whole undo list goes too, so Undo still goes all the way back after the page is closed. The last 2,000 moves
-    // is more than a game takes, and keeps the save to about a megabyte even in Spider. A game won is left out.
-    const g = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
-    const save = { settings, stats, next: dealer?.kept(), game: g, introduced: [...introduced] };
-    let text = JSON.stringify(save);
+    // is more than a game takes, and keeps a game to about a megabyte even in Spider. A game won is left out.
+    const now = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
+    const games = Object.entries(waiting).filter(([v]) => v !== game?.v);
+    if (now) games.push([game.v, now]);
+    const head = JSON.stringify({ settings, stats, next: dealer?.kept(), introduced: [...introduced] }).slice(0, -1);
+    // `cut`: the games whose Undo history is cut to its last 200 moves.
+    const build = (cut = () => false) => `${head},"games":{${games.map(([v, g]) =>
+      `${JSON.stringify(v)}:${cut(v) && g.history.length > 200 ? JSON.stringify({ ...g, history: g.history.slice(-200) }) : g === now ? JSON.stringify(g) : textOf(g)}`).join(',')}}}`;
+    let text = build();
     try {
       localStorage.setItem(KEY, text);
     } catch (e) {
-      // With the browser's storage full, the record and the game still go, with less of the Undo history.
-      if (!g || g.history.length <= 200) throw e;
-      g.history = g.history.slice(-200);
-      text = JSON.stringify(save);
-      localStorage.setItem(KEY, text);
+      // With the browser's storage full, the record and the games still go, with less of the Undo history: the games
+      // waiting lose theirs first, then the game on the table.
+      if (games.every(([, g]) => g.history.length <= 200)) throw e;
+      try {
+        text = build(v => v !== game?.v || !now);
+        localStorage.setItem(KEY, text);
+      } catch {
+        text = build(() => true);
+        localStorage.setItem(KEY, text);
+      }
     }
     lastWritten = text;
     ok = true;
@@ -609,9 +673,10 @@ function kept(ok) {
 }
 
 // Another tab, or the installed app beside a browser tab, shares this save. When it saves, this page takes up what it
-// saved, so neither one writes its own old copy over the other's record or game: the record and the settings at once,
-// and the game once nothing is being dragged or dealt here. The other page having won the game this one shows, this
-// one's is won too, and isn't counted or played again.
+// saved, so neither one writes its own old copy over the other's record or games: the record and the settings at once,
+// and the games once nothing is being dragged or dealt here. This page then shows the game the other one is playing,
+// with the others waiting as it left them. The other page having won the game this one shows, this one's is won too,
+// and isn't counted or played again.
 let adopting = 0;
 function adopt() {
   clearTimeout(adopting);
@@ -626,8 +691,18 @@ function adopt() {
   if (!$('sheet-menu').hidden) showStats($('stats-for').value);
   if (table.drag || (table.locked && $('won').hidden)) { adopting = setTimeout(adopt, 250); return; }
   lastWritten = text;
-  if (s.game === null) {
-    if (!game || over()) return;
+  const v = settings.variant; // the way of playing the other page is on
+  for (const k of Object.keys(waiting)) delete waiting[k];
+  for (const [k, g] of Object.entries(s.games)) {
+    const ok = k !== v && playable(g);
+    if (ok && ok.state.v === k) waiting[k] = ok;
+  }
+  const g = playable(s.games[v]);
+  if (!g || g.state.v !== v) {
+    // No game of that way saved: the other page has won it. If it's the one here, it's won here too. Otherwise this page
+    // keeps its own game.
+    if (game) { delete waiting[game.v]; settings.variant = game.v; }
+    if (!game || game.v !== v || over()) return;
     winCounted = true;
     counted = false;
     stopClock();
@@ -636,8 +711,7 @@ function adopt() {
     showInfo();
     return;
   }
-  const g = playable(s.game);
-  if (!g || JSON.stringify(g.state) === JSON.stringify(game)) return;
+  if (JSON.stringify(g.state) === JSON.stringify(game)) return;
   cancelChain();
   clearTimeout(landed);
   closeWon();
@@ -716,6 +790,15 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 function openNew() {
   hideToast();
   $('new-note').hidden = !inPlay();
+  // The other ways of playing with a game waiting say so: choosing one carries on with it.
+  document.querySelectorAll('[data-v]').forEach(b => {
+    b.querySelector('.waits')?.remove();
+    if (!waiting[b.dataset.v] || b.dataset.v === game?.v) return;
+    const line = document.createElement('span');
+    line.className = 'waits';
+    line.textContent = 'Carry on';
+    b.append(line);
+  });
   $('b-restart').hidden = !game || !game.moves;
   $('b-keep').textContent = game && over() ? 'Close' : 'Keep playing'; // a game won is over, so there's no playing on
   document.querySelectorAll('[data-v]').forEach(b => {
@@ -876,7 +959,11 @@ if ((matchMedia('(display-mode: standalone)').matches || navigator.standalone ==
 // ---- starting up: carry on with the saved game, or deal a new one ----
 
 apply();
-if (!resume(saved.game)) newGame(settings.variant);
+for (const [v, g] of Object.entries(saved.games ?? {})) {
+  const ok = v !== settings.variant && playable(g);
+  if (ok && ok.state.v === v) waiting[v] = ok;
+}
+if (!resume(saved.games?.[settings.variant])) newGame(settings.variant);
 
 // A saved game, if it's one that can be played: { state, history, elapsed, counted }, or null. Undo goes back as far
 // as the history is sound: a damaged entry, and every one before it, is left out.
@@ -927,7 +1014,7 @@ function take(g) {
 // is dropped, and a new one dealt, keeping the settings and the record.
 function resume(kept) {
   const g = playable(kept);
-  if (!g) return false;
+  if (!g || g.state.v !== settings.variant) return false;
   try {
     take(g);
     after();
@@ -953,4 +1040,5 @@ window.patience = {
   newGame,
   settings,
   stats,
+  waiting,
 };

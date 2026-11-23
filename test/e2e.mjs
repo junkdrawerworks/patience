@@ -1553,14 +1553,14 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p15.addInitScript(() => {
     const set = Storage.prototype.setItem;
     Storage.prototype.setItem = function (k, v) {
-      if (JSON.parse(v).game?.history.length > 200) throw new DOMException('full', 'QuotaExceededError');
+      if (Object.values(JSON.parse(v).games ?? {}).some(g => g.history.length > 200)) throw new DOMException('full', 'QuotaExceededError');
       return set.call(this, k, v);
     };
   });
   await p15.goto(base);
   await p15.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
   await p15.evaluate(() => { for (let i = 0; i < 250; i++) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' })); });
-  const save = await p15.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).game);
+  const save = await p15.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).games[window.patience.state.v]);
   assert.deepEqual([save.state.moves, save.history.length], [250, 200], 'the game saved, with the last 200 moves to undo');
   assert.equal(await p15.isHidden('#toast'), true, 'and nothing to say');
   await c15.close();
@@ -1667,7 +1667,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p16.click('#b-new');
   assert.equal(await p16.isVisible('#b-restart'), true, 'Start this deal again after a move');
   assert.equal(await p16.textContent('#b-keep'), 'Keep playing');
-  assert.equal(await p16.textContent('#new-note'), "A new deal counts the game you're in as a loss. Starting this deal again doesn't.");
+  assert.equal(await p16.textContent('#new-note'), "A new deal of this game counts the one you're in as a loss. Starting this deal again doesn't.");
   assert.equal(await p16.isVisible('#new-note'), true);
   await p16.evaluate(() => { const st = window.patience.stats[window.patience.state.v]; st.streak = 3; st.best = 3; });
   const was = await p16.evaluate(() => ({ ...window.patience.stats[window.patience.state.v] }));
@@ -1677,6 +1677,137 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.equal((await p16.evaluate(() => window.patience.state)).moves, 0, 'the deal started again');
   assert.deepEqual(await p16.evaluate(() => window.patience.stats[window.patience.state.v]), was, 'with the streak and the count kept');
   await c16.close();
+}
+
+// Each way of playing keeps its own game. Choosing FreeCell part way through a Klondike game puts the Klondike game
+// aside, with no loss: New game then says Carry on under Draw one, which brings it back as it was, Undo and all, and the
+// FreeCell game waits in turn, through a reload. Only a new deal of the same way counts the game it replaces as a loss.
+{
+  const cw = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const pw = await cw.newPage();
+  const errors = [];
+  pw.on('pageerror', e => errors.push(e.message));
+  const ready = () => pw.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = () => pw.evaluate(() => ({ v: window.patience.state.v, deal: window.patience.state.deal, moves: window.patience.state.moves }));
+  const carries = () => pw.evaluate(() => [...document.querySelectorAll('[data-v]')].filter(b => b.querySelector('.waits')).map(b => b.dataset.v));
+  await pw.goto(base);
+  await ready();
+  await pw.evaluate(() => window.patience.newGame('k1', 11705));
+  await pw.waitForTimeout(1500);
+  await ready();
+  await pw.click('.spot[data-pile="stock"]', { force: true });
+  await ready();
+  await pw.click('.spot[data-pile="stock"]', { force: true });
+  await ready();
+  await pw.evaluate(() => Object.assign(window.patience.stats.k1, { streak: 2, best: 2 }));
+  const k1 = await pw.evaluate(() => ({ ...window.patience.stats.k1 }));
+  await pw.click('#b-new');
+  assert.deepEqual(await carries(), [], 'nothing waiting yet');
+  await pw.click('[data-v="fc"]');
+  await pw.waitForTimeout(1500);
+  await ready();
+  assert.equal((await now()).v, 'fc');
+  assert.deepEqual(await pw.evaluate(() => window.patience.stats.k1), k1, 'putting Klondike aside is no loss');
+  const fcDeal = (await now()).deal;
+  await pw.click('#b-hint');
+  await pw.waitForSelector('.hint', { timeout: 15000 });
+  await pw.keyboard.press('Enter');
+  await ready();
+  assert.equal((await now()).moves, 1);
+  await pw.click('#b-new');
+  assert.deepEqual(await carries(), ['k1'], 'Draw one says Carry on');
+  assert.equal(await pw.textContent('[data-v="k1"] .waits'), 'Carry on');
+  await pw.click('[data-v="k1"]');
+  await ready();
+  assert.deepEqual(await now(), { v: 'k1', deal: 11705, moves: 2 }, 'back in the Klondike game as it was');
+  assert.match(await pw.textContent('#status'), /Klondike, draw one · Deal 11,705/);
+  assert.equal(await pw.isDisabled('#b-undo'), false, 'with its Undo');
+  await pw.reload();
+  await ready();
+  assert.deepEqual(await now(), { v: 'k1', deal: 11705, moves: 2 }, 'through a reload');
+  await pw.click('#b-new');
+  assert.deepEqual(await carries(), ['fc'], 'FreeCell waits now');
+  await pw.click('[data-v="fc"]');
+  await ready();
+  assert.deepEqual(await now(), { v: 'fc', deal: fcDeal, moves: 1 }, 'the FreeCell game, as it was');
+  await pw.click('#b-undo');
+  await ready();
+  assert.equal((await now()).moves, 0, 'Undo goes back in it');
+  // Klondike again, and a new deal of it from New game: that one is a loss.
+  await pw.click('#b-new');
+  await pw.click('[data-v="k1"]');
+  await ready();
+  await pw.click('#b-new');
+  assert.equal(await pw.isVisible('#new-note'), true, 'a new deal of this game is a loss');
+  assert.deepEqual(await carries(), ['fc'], 'the FreeCell game waits on, with no moves to its name');
+  await pw.click('[data-v="k1"]');
+  await pw.waitForTimeout(1500);
+  await ready();
+  assert.notEqual((await now()).deal, 11705, 'a new deal');
+  assert.equal((await pw.evaluate(() => window.patience.stats.k1)).streak, 0, 'and the game it replaced was lost');
+  const saved = await pw.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')));
+  assert.deepEqual(Object.keys(saved.games).sort(), ['fc', 'k1']);
+  assert.equal(saved.game, undefined);
+  assert.deepEqual(errors, []);
+  await cw.close();
+}
+
+// Two tabs on different ways of playing: each follows the other, onto the game it carries on with, and the game it
+// leaves waits, with nothing counted twice.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const [a, b] = [await c.newPage(), await c.newPage()];
+  const errors = []; for (const p of [a, b]) p.on('pageerror', e => errors.push(e.message));
+  const ready = p => p.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = p => p.evaluate(() => JSON.stringify(window.patience.state));
+  const same = async why => { for (let i = 0; (await now(a)) !== (await now(b)); i++) { assert.ok(i < 40, why); await a.waitForTimeout(50); } };
+  await a.goto(base); await ready(a);
+  await a.evaluate(() => window.patience.newGame('k1', 11705)); await a.waitForTimeout(1500); await ready(a);
+  await a.click('.spot[data-pile="stock"]', { force: true }); await ready(a);
+  await b.goto(base); await ready(b);
+  await same('B opens on A game');
+  await a.evaluate(() => window.patience.newGame('fc', 617)); await a.waitForTimeout(1500); await ready(a);
+  await same('B shows FreeCell');
+  await b.evaluate(() => { document.getElementById('b-new').click(); document.querySelector('[data-v="k1"]').click(); }); await ready(b);
+  assert.equal(JSON.parse(await now(b)).moves, 1);
+  await same('A carries on Klondike too');
+  await a.click('.spot[data-pile="stock"]', { force: true }); await ready(a);
+  await same('B shows the move');
+  await b.evaluate(() => { document.getElementById('b-new').click(); document.querySelector('[data-v="fc"]').click(); }); await ready(b);
+  assert.equal(JSON.parse(await now(b)).deal, 617);
+  await same('A on FreeCell');
+  const st = await a.evaluate(() => [Object.keys(window.patience.waiting), window.patience.stats.k1.played]);
+  assert.deepEqual(st, [['k1'], 1]);
+  assert.deepEqual(errors, []);
+  await c.close();
+}
+
+// A save from before each way kept its own game, with one game under `game`, comes back as the game of its way.
+{
+  const cm = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const pm = await cm.newPage();
+  const { freecell } = await import('../js/games/freecell.js');
+  const dealt = freecell.deal(617, 'fc'), moved = { ...freecell.move(dealt, 't3', 1, 'c0'), moves: 1 };
+  await pm.addInitScript(([state, past]) => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('patience.v1', JSON.stringify({
+      settings: { variant: 'fc', winnable: true, auto: true, clock: true, four: false, left: false, look: 'phone' },
+      stats: { fc: { played: 4, won: 2, streak: 1, best: 2, fastest: 300000 } },
+      game: { state, history: [past], elapsed: 90000, counted: true },
+    }));
+  }, [moved, dealt]);
+  await pm.goto(base);
+  await pm.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  assert.deepEqual(await pm.evaluate(() => window.patience.state), moved, 'the game came back');
+  assert.equal(await pm.isDisabled('#b-undo'), false, 'with its Undo');
+  await pm.click('#b-undo');
+  await pm.waitForFunction(() => window.patience.state.moves === 0);
+  const saved = await pm.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')));
+  assert.equal(saved.game, undefined);
+  assert.deepEqual(saved.games.fc.state, dealt, 'saved as the FreeCell game');
+  assert.equal(saved.stats.fc.played, 4);
+  await cm.close();
 }
 
 // Cards on their way somewhere don't take a tap or a press: a quick second tap on the Spider deck, while the last

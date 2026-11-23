@@ -581,6 +581,9 @@ button { font: inherit; color: inherit; }
   .choice:hover { border-color: var(--accent); }
 }
 .choice.current { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+/* A way of playing with a game waiting says so under its name. */
+.choice:has(.waits) { padding-block: 5px; }
+.choice .waits { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.3; color: var(--accent); }
 .plain {
   display: block;
   width: 100%;
@@ -609,6 +612,7 @@ button { font: inherit; color: inherit; }
   #sheet-new .choice { padding: 9px 12px; font-size: 15px; }
   #sheet-new .pick:last-child .choice { padding: 9px 6px; font-size: 14.5px; }
   #sheet-new .pick .aside { margin: 5px 0 0; font-size: 12.5px; line-height: 1.3; }
+  #sheet-new .pick .choice:has(.waits) { padding-block: 3px; }
   .plains { display: flex; gap: 8px; margin-top: 6px; }
   .plains .plain { margin-top: 0; }
 }
