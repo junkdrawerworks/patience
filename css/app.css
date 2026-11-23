@@ -473,6 +473,19 @@ button { font: inherit; color: inherit; }
 @media (hover: hover) {
   .plain:hover { background: var(--line); }
 }
+/* A phone held sideways: the New game sheet goes wide, with the three games side by side, so every choice shows
+   without scrolling. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #sheet-new .panel { width: min(100% - 32px, 760px); max-height: calc(100dvh - 8px); padding-top: 14px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  #sheet-new h2 { margin-bottom: 4px; font-size: 21px; }
+  #sheet-new .note { margin: 0 0 8px; }
+  #sheet-new .games { grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  #sheet-new .pick h3 { font-size: 18px; }
+  #sheet-new .pick p { font-size: 13px; line-height: 1.35; margin-bottom: 8px; }
+  #sheet-new .choice { padding: 9px 12px; font-size: 15px; }
+  .plains { display: flex; gap: 8px; margin-top: 6px; }
+  .plains .plain { margin-top: 0; }
+}
 .primary {
   display: block;
   width: 100%;
