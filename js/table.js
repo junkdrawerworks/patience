@@ -204,6 +204,13 @@ export class Table {
     // Which cards are moving, and from where.
     const flyers = this.flyNext || new Set();
     this.flyNext = null;
+    // Cards held up by a finger stay under it while the rest of the table changes, so long as they're still the cards
+    // on top of the pile they came from. If they aren't (Undo took them back, say), they're let go, back to the table.
+    const d = this.drag, holding = d && this.holds(d, s) ? new Set(d.moved ? d.cards : []) : null;
+    if (d && !holding) {
+      this.endDrag();
+      if (d.moved) d.cards.forEach(c => flyers.add(c));
+    }
     const moved = [];
     for (const [c, p] of at) {
       const old = this.at.get(c);
@@ -226,7 +233,9 @@ export class Table {
       el.classList.toggle('down', !p.up);
       el.setAttribute('aria-label', p.up ? cardName(c) : 'face-down card');
       const flight = this.flights.get(c);
-      if (movedSet.has(c) && animate) {
+      if (holding?.has(c)) {
+        el.style.transform = `translate(${Math.round(p.x + d.dx)}px, ${Math.round(p.y + d.dy)}px)`;
+      } else if (movedSet.has(c) && animate) {
         // The further it goes, the longer it takes, so a long trip doesn't look like a jump.
         const ms = Math.round(Math.min(320, 170 + 0.12 * Math.hypot(p.x - was[0], p.y - was[1])));
         el.style.setProperty('--travel', `${ms}ms`);
@@ -336,21 +345,35 @@ export class Table {
     }
   }
 
+  // Whether the cards picked up are still the cards on top of the pile they came from, in table `s`.
+  holds(d, s) {
+    const g = gameOf(s), up = d.pile in this.m.kind && g.pile(s, d.pile).up;
+    return !!up && up.length >= d.n && d.cards.every((c, i) => up[up.length - d.n + i] === c);
+  }
+
+  // Let go of the cards picked up, without playing them.
+  endDrag() {
+    const d = this.drag;
+    this.drag = null;
+    if (d) for (const c of d.cards) this.cards.get(c)?.classList.remove('drag');
+  }
+
   up(e, cancelled) {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
-    this.drag = null;
+    this.endDrag();
+    // (They always are, as render() lets them go when they aren't, but a move made with other cards would be wrong.)
+    const still = this.holds(d, this.state);
     if (!d.moved) {
-      if (cancelled) return;
+      if (cancelled || !still) return;
       // A tap on the card Hint lit up plays Hint's move, wherever a tap would otherwise send it.
       const h = this.shown;
       if (h && !h.stock && d.pile === h.from && d.n === h.n) this.on.move(d.pile, d.n, h.to);
       else this.on.tap(d.pile, d.n);
       return;
     }
-    for (const c of d.cards) this.cards.get(c).classList.remove('drag');
     this.flyNext = new Set(d.cards);
-    const to = cancelled ? null : this.dropTarget(d);
+    const to = cancelled || !still ? null : this.dropTarget(d);
     if (to) this.on.move(d.pile, d.n, to);
     else this.render(this.state);
   }

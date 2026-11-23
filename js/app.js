@@ -117,13 +117,16 @@ function after() {
   if (settings.auto) {
     const step = g.autoStep(game);
     if (step) {
-      chain = setTimeout(() => {
+      const go = () => {
+        // Not while cards are held: they'd have to be let go, and the card going up may be one of them.
+        if (table.drag) { chain = setTimeout(go, 140); return; }
         chain = 0;
         const next = G() === g && g.move(game, step.from, step.n, step.to);
         if (!next) return; // another game, or the card has gone
         next.moves = game.moves; // these aren't the player's moves
         set(next);
-      }, 140);
+      };
+      chain = setTimeout(go, 140);
       return;
     }
   }

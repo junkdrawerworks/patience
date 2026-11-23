@@ -1300,6 +1300,66 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cf.close();
 }
 
+// A card held while others go up by themselves stays under the finger, and those cards wait for it to be let go; the
+// drop then moves the card held. Undo while a card is held takes it back to where it was, and letting go then moves
+// nothing.
+{
+  const ch = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  const ph = await ch.newPage();
+  const errors = [];
+  ph.on('pageerror', e => errors.push(e.message));
+  const ready = () => ph.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await ph.goto(base);
+  await ready();
+  // Klondike: the four aces on the four twos, ready to go up, then the twos; the jack of clubs and the queen of hearts
+  // in the last two columns.
+  const card = (suit, rank) => suit * 13 + rank - 1, JC = card(2, 11), QH = card(1, 12);
+  const low = [0, 1, 2, 3].flatMap(suit => [card(suit, 2), card(suit, 1)]);
+  // (With cards going up by themselves off until the jack is held; then the same table again with it on.)
+  await ph.evaluate(([low, JC, QH]) => {
+    const all = Array.from({ length: 52 }, (_, c) => c), used = [...low, JC, QH];
+    window.patience.settings.auto = false;
+    window.patience.load(window.heldTable = {
+      v: 'k1', deal: 11705, draw: 1, fan: 0, moves: 7, waste: [], found: [[], [], [], []],
+      stock: all.filter(c => !used.includes(c)),
+      tab: [0, 1, 2, 3].map(i => ({ down: [], up: low.slice(2 * i, 2 * i + 2) })).concat([{ down: [], up: [] }, { down: [], up: [QH] }, { down: [], up: [JC] }]),
+    });
+  }, [low, JC, QH]);
+  const jack = await ph.locator(`.card[data-c="${JC}"]`).boundingBox(), queen = await ph.locator(`.card[data-c="${QH}"]`).boundingBox();
+  await ph.mouse.move(jack.x + 15, jack.y + 15);
+  await ph.mouse.down();
+  await ph.mouse.move(jack.x + 15, jack.y + 160, { steps: 4 });
+  await ph.evaluate(() => { window.patience.settings.auto = true; window.patience.load(window.heldTable); });
+  for (let i = 0; i < 6; i++) {
+    await ph.waitForTimeout(200);
+    const now = await ph.locator(`.card[data-c="${JC}"]`).boundingBox();
+    assert.ok(Math.abs(now.x - jack.x) < 2 && Math.abs(now.y - (jack.y + 145)) < 2, `the jack held stays under the finger (${now.x}, ${now.y})`);
+  }
+  assert.equal((await ph.evaluate(() => window.patience.state.found.flat().length)), 0, 'nothing goes up while the jack is held');
+  await ph.mouse.move(queen.x + 15, queen.y + 40, { steps: 4 });
+  await ph.mouse.up();
+  await ready();
+  let s = await ph.evaluate(() => window.patience.state);
+  assert.deepEqual(s.tab[5].up, [QH, JC], 'the jack went onto the queen');
+  assert.equal(s.found.flat().length, 8, 'and then the aces and twos went up');
+
+  // Hold the jack again, Undo, and let go over the empty column.
+  const held = await ph.locator(`.card[data-c="${JC}"]`).boundingBox(), empty = await ph.locator('.spot[data-pile="t4"]').boundingBox();
+  await ph.mouse.move(held.x + 15, held.y + 15);
+  await ph.mouse.down();
+  await ph.mouse.move(held.x + 15, held.y + 100, { steps: 4 });
+  await ph.keyboard.press('z');
+  await ph.waitForTimeout(100);
+  assert.equal(await ph.locator('.card.drag').count(), 0, 'Undo lets go of the jack');
+  await ph.mouse.move(empty.x + 15, empty.y + 15, { steps: 4 });
+  await ph.mouse.up();
+  await ready();
+  s = await ph.evaluate(() => window.patience.state);
+  assert.deepEqual([s.tab[5].up, s.tab[6].up, s.moves], [[QH], [JC], 7], 'the jack is back where it was, and letting go moved nothing');
+  assert.deepEqual(errors, [], 'errors while holding a card');
+  await ch.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
