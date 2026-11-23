@@ -9,7 +9,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const RECYCLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg>';
 
 export class Table {
-  // handlers: stock(), tap(pile, n), move(pile, n, to), touched()
+  // handlers: stock(), tap(pile, n), move(pile, n, to) (a drop, or a tap on the card Hint lit up), touched()
   constructor(el, handlers) {
     this.el = el;
     this.on = handlers;
@@ -149,10 +149,11 @@ export class Table {
   // Draw the state. still: jump there with no movement. deal: deal the columns out one by one.
   render(s, opts = {}) {
     const first = !this.state || this.v !== s.v;
+    // A hint stays lit until the cards move: drawing the same table again (a new size, the deck moved) keeps it.
+    if (s !== this.state) this.clearHint();
     this.state = s;
     if (first) this.setup(s);
     if (!this.m || this.m.layoutKey !== layoutKey(s, this.left)) this.layout();
-    this.clearHint();
     const at = this.place(s), m = this.m;
     if (opts.still || (first && !opts.deal)) this.el.classList.add('still');
 
@@ -280,7 +281,14 @@ export class Table {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
     this.drag = null;
-    if (!d.moved) { if (!cancelled) this.on.tap(d.pile, d.n); return; }
+    if (!d.moved) {
+      if (cancelled) return;
+      // A tap on the card Hint lit up plays Hint's move, wherever a tap would otherwise send it.
+      const h = this.shown;
+      if (h && !h.stock && d.pile === h.from && d.n === h.n) this.on.move(d.pile, d.n, h.to);
+      else this.on.tap(d.pile, d.n);
+      return;
+    }
     for (const c of d.cards) this.cards.get(c).classList.remove('drag');
     this.flyNext = new Set(d.cards);
     const to = cancelled ? null : this.dropTarget(d);
@@ -326,8 +334,9 @@ export class Table {
     }
   }
 
-  // Light up a suggested move: the card to pick up (or the stock), and where it goes.
-  // `shown` keeps the move while it's lit up, so the keyboard can play it.
+  // Light up a suggested move: the card to pick up (or the stock), and where it goes. It pulses three times, then
+  // glows steadily until the next move, Undo, New or a drag. `shown` keeps the move while it's lit up, so Enter, or
+  // a tap on the lit card, plays it.
   showHint(h) {
     this.clearHint();
     this.shown = h;
@@ -344,11 +353,9 @@ export class Table {
     }
     marks.forEach(el => el.classList.add('hint'));
     this.hinted = marks;
-    this.hintTimer = setTimeout(() => this.clearHint(), 3200);
   }
 
   clearHint() {
-    clearTimeout(this.hintTimer);
     if (this.hinted) this.hinted.forEach(el => el.classList.remove('hint'));
     this.hinted = null;
     this.shown = null;

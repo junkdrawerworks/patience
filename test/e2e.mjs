@@ -666,6 +666,63 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c6.close();
 }
 
+// Tapping the card Hint lit up plays Hint's move, even where a tap would send it somewhere else, and the hint stays
+// lit until the next move. In FreeCell game 617 Hint's first move is the queen of hearts onto the king of clubs in the
+// third column, where a tap alone sends it to the second; in Klondike a card Hint wants back down off a foundation,
+// which a tap alone leaves where it is, comes down.
+{
+  const ct = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const pt = await ct.newPage();
+  const errors = [];
+  pt.on('pageerror', e => errors.push(e.message));
+  const ready = () => pt.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = () => pt.evaluate(() => window.patience.state);
+  const lit = () => pt.evaluate(() => [...document.querySelectorAll('.card.hint')].map(el => +el.dataset.c));
+  const tapCard = async c => {
+    const b = await pt.locator(`.card[data-c="${c}"]`).boundingBox();
+    await pt.touchscreen.tap(b.x + 12, b.y + 10);
+  };
+  await pt.goto(base);
+  await ready();
+  await pt.evaluate(() => window.patience.newGame('fc', 617));
+  await pt.waitForTimeout(1500);
+  await ready();
+  assert.equal(await pt.evaluate(async () => (await import('./js/games/freecell.js')).freecell.tapTarget(window.patience.state, 't7', 1)), 't1',
+    'a tap alone sends the queen of hearts to the second column');
+  await pt.tap('#b-hint');
+  await pt.waitForSelector('.hint', { timeout: 20000 });
+  assert.deepEqual((await lit()).sort((a, b) => a - b), [24, 38], 'Hint lit the queen of hearts and the king of clubs');
+  await pt.waitForTimeout(3600);
+  assert.deepEqual((await lit()).length, 2, 'the hint is still lit after it stops pulsing');
+  await tapCard(24);
+  await ready();
+  assert.equal((await now()).tab[2].at(-1), 24, 'the tap put the queen of hearts on the king of clubs, where Hint said');
+  assert.equal(await pt.locator('.hint').count(), 0, 'and the hint went with the move');
+
+  // Klondike drawing three, deal 11,705 after 67 moves of Hint's: it wants the 5 of spades back down off the third
+  // foundation onto the 6 of diamonds in the sixth column. Tapped, it comes down; and Enter plays a hint long after it's lit.
+  const fd = {"v":"k3","deal":11705,"draw":3,"stock":[42,41],"waste":[29,10,9,49],"fan":2,"found":[[13,14,15],[26,27],[0,1,2,3,4],[]],"tab":[{"down":[],"up":[51,37,23,35,47,33,45,31,17]},{"down":[],"up":[38,24,36,22,34,20,6,18,30,16,28,40]},{"down":[],"up":[25]},{"down":[32],"up":[21,7,19,5,43]},{"down":[11],"up":[48,8,46]},{"down":[39],"up":[44]},{"down":[],"up":[12,50]}],"moves":67};
+  await pt.evaluate(s => window.patience.load(s), fd);
+  await ready();
+  await pt.tap('#b-hint');
+  await pt.waitForSelector('.hint', { timeout: 20000 });
+  assert.deepEqual((await lit()).sort((a, b) => a - b), [4, 44], 'Hint lit the 5 of spades on its foundation and the 6 of diamonds');
+  await tapCard(4);
+  await ready();
+  let s = await now();
+  assert.deepEqual([s.found[2].at(-1), s.tab[5].up.at(-1)], [3, 4], 'the tap brought the 5 of spades down onto the 6 of diamonds');
+  await pt.tap('#b-undo');
+  await ready();
+  await pt.tap('#b-hint');
+  await pt.waitForSelector('.hint', { timeout: 20000 });
+  await pt.waitForTimeout(3600);
+  await pt.keyboard.press('Enter');
+  await ready();
+  assert.equal((await now()).tab[5].up.at(-1), 4, 'Enter played the hint after it stopped pulsing');
+  assert.deepEqual(errors, [], 'errors tapping the lit card');
+  await ct.close();
+}
+
 // Swipes near the screen's sides. On Android with gesture navigation a swipe that starts near either side is the
 // phone's Back, and Chrome has its own swipe to go Back or Forward. A swipe sideways is nobody's, so it can't run on
 // into Chrome's: the page doesn't overscroll, and the table takes every touch.
