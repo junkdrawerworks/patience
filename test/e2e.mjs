@@ -2110,6 +2110,18 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   const short = await spread([3, 6], 0);
   assert.ok(short.gaps.every(g => Math.abs(g - 0.5) < 0.03), `short columns, half a card apart: ${short.gaps.map(g => g.toFixed(2))}`);
   assert.deepEqual([short.covered, short.top], ['hidden', 'visible'], 'a covered card shows none of its middle; the top card shows it');
+  // Held off it, the card underneath shows its middle; let go where it can't go, it's covered again.
+  const [lifted, beneath] = await pg.evaluate(() => window.patience.state.tab[0].up.slice(-2).reverse());
+  const middleOf = c => pg.$eval(`#card-${c} :is(.pip, .court)`, el => getComputedStyle(el).visibility);
+  const held = await pg.locator('#card-' + lifted).boundingBox();
+  await pg.mouse.move(held.x + held.width / 2, held.y + 8);
+  await pg.mouse.down();
+  await pg.mouse.move(held.x + held.width / 2, held.y + 300, { steps: 6 });
+  await pg.waitForTimeout(100);
+  assert.equal(await middleOf(beneath), 'visible', 'the card under the one held shows its middle');
+  await pg.mouse.up();
+  await pg.waitForTimeout(700);
+  assert.equal(await middleOf(beneath), 'hidden', 'covered again once the card is back');
   const long = await spread([3, 40], 10);
   assert.ok(Math.abs(long.gaps[0] - long.gaps[1]) < 0.03, `the columns line up: ${long.gaps.map(g => g.toFixed(2))}`);
   assert.ok(long.gaps[0] > 0.37 && long.gaps[0] < 0.48 && long.fits, `a long column brings them closer, ${long.gaps[0].toFixed(2)} of a card, and fits`);

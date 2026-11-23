@@ -275,6 +275,8 @@ export class Table {
       this.endDrag();
       if (d.moved) d.cards.forEach(c => flyers.add(c));
     }
+    // While cards are held off a column, the card they were on isn't covered.
+    const bare = holding?.size ? this.beneathHeld(d, s) : undefined;
     const moved = [];
     for (const [c, p] of at) {
       const old = this.at.get(c);
@@ -295,7 +297,7 @@ export class Table {
       const was = el.style.transform.match(/-?[\d.]+/g) || [p.x, p.y];
       el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
       el.classList.toggle('down', !p.up);
-      el.classList.toggle('covered', !!p.covered);
+      el.classList.toggle('covered', !!p.covered && c !== bare);
       el.setAttribute('aria-label', p.up ? cardName(c) : 'face down');
       const flight = this.flights.get(c);
       if (holding?.has(c)) {
@@ -455,6 +457,8 @@ export class Table {
       d.moved = true;
       this.clearHint();
       d.cards.forEach((c, i) => { this.land(c); const el = this.cards.get(c); el.classList.add('drag'); el.style.zIndex = 9000 + i; });
+      // The card they were on shows its middle while they're held off it (see render()).
+      this.cards.get(this.beneathHeld(d, this.state))?.classList.remove('covered');
     }
     d.dx = dx; d.dy = dy;
     for (const c of d.cards) {
@@ -476,6 +480,12 @@ export class Table {
     this.aimed?.classList.remove('target');
     el?.classList.add('target');
     this.aimed = el;
+  }
+
+  // The card under the cards picked up, in table `s`, if there is one face up.
+  beneathHeld(d, s) {
+    const up = gameOf(s).pile(s, d.pile).up;
+    return up[up.length - d.n - 1];
   }
 
   // Whether the cards picked up are still the cards on top of the pile they came from, in table `s`.
