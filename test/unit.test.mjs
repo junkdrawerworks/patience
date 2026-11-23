@@ -281,6 +281,20 @@ test('a dead end is out of moves even with a card that can still go onto a colum
   assert.equal(outOfMoves(t), false);
 });
 
+test('a dead end is out of moves even when a card can come down off a foundation and go straight back up', () => {
+  // Deal 663,674 drawing one, 236 moves in. The 2 of diamonds can come down onto the 3 of clubs, but nothing can go on
+  // it and it goes straight back up; nothing else can ever turn a card over or put one up.
+  const s = {
+    v: 'k1', deal: 663674, draw: 1, fan: 0, moves: 236, stock: [45, 31, 21, 51, 22, 9, 48], waste: [],
+    found: [[0, 1, 2, 3], [13, 14, 15, 16], [39, 40], []],
+    tab: [[[], [38, 50]], [[], [11]], [[7, 12], [34, 20]], [[24, 4], [41, 27]], [[30, 43], [37, 23, 35, 47, 33, 19, 5]], [[6, 29, 25, 36], [8, 46, 32, 18]], [[10, 42, 44, 49, 17, 26], [28]]]
+      .map(([down, up]) => ({ down, up })),
+  };
+  assert.equal(solve(forSolver(s), 1e6).result, 'lost');
+  assert.equal(outOfMoves(s), true);
+  assert.equal(deadEnd(s).none, false, 'there are moves, just none that helps');
+});
+
 test('a king with cards under it can still move to an empty column', () => {
   const s = empty();
   s.found = [11, 11, 11, 11].map((n, suit) => Array.from({ length: n }, (_, i) => card(suit, i + 1)));

@@ -357,9 +357,9 @@ export class Progress extends Search {
       const m = f.moves[f.i++];
       this.apply(m);
       const autos = this.autos();
-      if (autos.length || this.downs() < this.downs0 || this.higher()) { this.result = 'live'; return this.result; }
+      if (this.downs() < this.downs0 || this.higher()) { this.result = 'live'; return this.result; }
       const k = this.key();
-      if (this.seen.has(k)) { this.undo(m); continue; }
+      if (this.seen.has(k)) { this.undoAll(autos); this.undo(m); continue; }
       this.seen.add(k);
       this.nodes++;
       stack.push({ moves: this.moves(), i: 0, via: m, autos });
