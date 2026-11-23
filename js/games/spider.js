@@ -50,6 +50,8 @@ function clear(s, t) {
 }
 
 const isRun = cards => cards.every((c, i) => i === 0 || follows(c, cards[i - 1]));
+// How many cards at the top of a column's face-up cards make a run of one suit.
+const runOn = up => { let n = up.length ? 1 : 0; while (n < up.length && follows(up[up.length - n], up[up.length - n - 1])) n++; return n; };
 
 export const spider = {
   deal,
@@ -122,7 +124,9 @@ export const spider = {
   },
 
   // A tap sends a run onto a card one higher of its own suit if there is one, then any card one higher,
-  // then an empty column (unless the run is the whole column already). A run already on a card one higher of its own
+  // then an empty column (unless the run is the whole column already). Of the cards of its own suit, the one that makes
+  // the longest run of that suit comes first (so one finishing king to ace does), then the nearest to the right.
+  // A run already on a card one higher of its own
   // suit goes only onto another like it: anywhere else would split a longer run, which is seldom what's wanted, so
   // with nowhere like it the cards shake (a drag still puts them anywhere the rules allow).
   tapTarget(s, from, n) {
@@ -137,10 +141,11 @@ export const spider = {
       .filter(x => x.id !== from && spider.canDrop(s, cards, x.id))
       .map(x => {
         const empty = !x.t.up.length && !x.t.down.length;
-        return { ...x, empty, rank: empty ? 2 : suitOf(top(x.t.up)) === suitOf(base) ? 0 : 1 };
+        const rank = empty ? 2 : suitOf(top(x.t.up)) === suitOf(base) ? 0 : 1;
+        return { ...x, empty, rank, run: rank === 0 ? runOn(x.t.up) + cards.length : 0 };
       })
       .filter(x => !(x.empty && whole) && !(inRun && x.rank !== 0));
-    order.sort((a, b) => a.rank - b.rank || ((a.i - start + 10) % 10) - ((b.i - start + 10) % 10));
+    order.sort((a, b) => a.rank - b.rank || b.run - a.run || ((a.i - start + 10) % 10) - ((b.i - start + 10) % 10));
     return order[0]?.id ?? null;
   },
 

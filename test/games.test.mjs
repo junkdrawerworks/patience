@@ -169,6 +169,24 @@ test('a Spider tap keeps a run of one suit together rather than move its top car
   assert.equal(spider.tapTarget(s, 't0', 1), 't1', 'a 5 of spades on a 6 of hearts still moves to the other 6 of hearts');
 });
 
+test('a Spider tap sends a card where it makes the longest run of its suit, finishing king to ace first', () => {
+  // King down to 2 of spades in the first column, and lone 2s of spades nearer the ace: the ace goes on the king's run.
+  const s = emptySp();
+  s.tab[0].up = Array.from({ length: 12 }, (_, i) => card(S, 13 - i));
+  s.tab[1].up = [card(H, 9), card(S, 1)];
+  s.tab[3].up = [52 + card(S, 2)];
+  s.tab[5].up = [104 + card(S, 2)];
+  assert.equal(spider.tapTarget(s, 't1', 1), 't0', 'the ace finishes the run');
+  // Without the king's run: the 2 of spades on a 3 and a 4 of spades makes the longer run.
+  s.tab[0].up = [card(H, 8)];
+  s.tab[3].up = [52 + card(S, 3)];
+  s.tab[5].up = [104 + card(S, 4), 104 + card(S, 3)];
+  s.tab[1].up = [card(H, 9), card(S, 2)];
+  assert.equal(spider.tapTarget(s, 't1', 1), 't5', 'onto the longer run');
+  s.tab[5].up = [104 + card(S, 3)];
+  assert.equal(spider.tapTarget(s, 't1', 1), 't3', 'the same length: the nearest to the right');
+});
+
 test('a finished run of one suit clears away and turns over the card under it', () => {
   const s = emptySp();
   s.tab[0] = { down: [card(H, 5)], up: Array.from({ length: 12 }, (_, i) => card(S, 13 - i)) }; // king to 2
