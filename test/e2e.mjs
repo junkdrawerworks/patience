@@ -2140,10 +2140,17 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   };
   assert.equal(await arrow([], []), 0, 'no arrow with the deck and the waste both empty');
   assert.equal(await arrow([], [51]), 1, 'the arrow with cards on the waste to turn over');
+  // The deck looks as thick as it is: a back showing for every eight cards in it, up to four, each a little lower.
+  const backs = async n => {
+    await arrow(Array.from({ length: n }, (_, c) => 51 - c), []);
+    return pa.evaluate(() => new Set(window.patience.state.stock.map(c => document.getElementById('card-' + c))
+      .filter(el => !el.classList.contains('deep')).map(el => el.getBoundingClientRect().top)).size);
+  };
+  assert.deepEqual([await backs(24), await backs(16), await backs(12), await backs(5)], [4, 3, 2, 1], 'backs showing in the deck');
   // An empty Klondike column has a faint K in it, as only a king can go there; FreeCell's and Spider's take any card.
   const letters = () => pa.$$eval('.spot[data-kind="column"]', els => els.map(el => el.textContent).join(''));
   await pa.evaluate(() => window.patience.load({ v: 'k1', deal: 11705, draw: 1, fan: 0, moves: 30, stock: [], waste: [], found: [[], [], [], []],
-    tab: Array.from({ length: 7 }, (_, i) => ({ down: [], up: i ? [] : Array.from({ length: 52 }, (_, c) => c) })) }));
+    tab: Array.from({ length: 7 }, (_, i) => (i ? { down: [], up: [] } : { down: Array.from({ length: 51 }, (_, c) => c), up: [51] })) }));
   await pa.waitForTimeout(300);
   assert.equal(await letters(), 'KKKKKKK', 'every Klondike column has its K');
   assert.equal(await pa.isVisible('.spot[data-pile="t6"] span'), true, 'and the K shows in an empty one');

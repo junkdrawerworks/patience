@@ -154,7 +154,12 @@ export class Table {
       const put = (c, x, y, z, faceUp, index, isDeep) => at.set(c, { x, y, z, up: faceUp, pile: id, index, deep: isDeep });
 
       if (kind === 'stock') {
-        down.forEach((c, i) => put(c, x0, m.top, z0 + i, false, i, deep(i, down.length, 2)));
+        // As thick as it is: a card's back for every eight cards, up to four, each a pixel or two below the one on top.
+        const n = down.length, backs = Math.min(4, 1 + Math.floor(n / 8)), off = m.cw < 50 ? 1 : 2;
+        down.forEach((c, i) => {
+          const under = n - 1 - i;
+          put(c, x0, m.top + Math.min(under, backs - 1) * off, z0 + i, false, i, under >= Math.max(2, backs));
+        });
       } else if (kind === 'deals') {
         // A row to deal is ten cards; each row left shows as its own card, fanned out.
         const rows = Math.ceil(down.length / 10), step = Math.round(m.cw * 0.2);
