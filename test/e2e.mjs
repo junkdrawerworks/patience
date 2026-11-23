@@ -985,6 +985,23 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await c15.close();
 }
 
+// Start this deal again is offered only once there's something to start again: not on a fresh deal.
+{
+  const c16 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const p16 = await c16.newPage();
+  const ready = () => p16.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await p16.goto(base);
+  await ready();
+  await p16.click('#b-new');
+  assert.equal(await p16.isVisible('#b-restart'), false, 'no Start this deal again at 0 moves');
+  await p16.keyboard.press('Escape');
+  await p16.click('.spot[data-pile="stock"]', { force: true });
+  await ready();
+  await p16.click('#b-new');
+  assert.equal(await p16.isVisible('#b-restart'), true, 'Start this deal again after a move');
+  await c16.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
