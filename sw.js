@@ -7,12 +7,12 @@
 // refreshed only when a page that loads it is visited online, and the copy could mix two releases. So FILES is a
 // fingerprint of every file in SHELL: change any of them and test/e2e.mjs fails until FILES is changed to match (it
 // says what to), which changes this file, so every copy is made whole again at once.
-const CACHE = 'patience-v4'; // bump the number when the file list changes
-const FILES = '583cee83'; // test/e2e.mjs checks this
+const CACHE = 'patience-v5'; // bump the number when the file list changes
+const FILES = '6055b804'; // test/e2e.mjs checks this
 const SHELL = [
   './', 'index.html', 'carry.js', 'icon.svg', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png',
   'css/app.css', 'fonts/fraunces.woff2', 'fonts/figtree.woff2',
-  'js/app.js', 'js/cards.js', 'js/deals.js', 'js/edge-guard.js', 'js/rng.js', 'js/suits.js', 'js/table.js', 'js/win.js',
+  'js/app.js', 'js/cards.js', 'js/deals.js', 'js/edge-guard.js', 'js/rng.js', 'js/suits.js', 'js/table.js', 'js/win.js', 'js/words.js',
   'js/games/index.js', 'js/games/klondike.js', 'js/games/freecell.js', 'js/games/spider.js', 'js/games/spider-deals.js',
   'js/solvers/klondike.js', 'js/solvers/best-first.js', 'js/solvers/freecell.js', 'js/solvers/spider.js',
 ];

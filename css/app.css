@@ -369,6 +369,9 @@ button { font: inherit; color: inherit; }
 
 /* ---- messages ---- */
 
+/* What just happened, for a screen reader only (app.js say()). */
+.said { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 .toast {
   position: fixed;
   left: 50%;

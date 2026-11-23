@@ -766,6 +766,50 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ca.close();
 }
 
+// Once a move has settled, one line for a screen reader says what happened, once: the cards that went up by themselves
+// after it are in the same line. Undo and Hint say so too. The clock never touches it, and the deal's name at the top
+// isn't read out after every move.
+{
+  const cl = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  const pl = await cl.newPage();
+  const errors = [];
+  pl.on('pageerror', e => errors.push(e.message));
+  const ready = () => pl.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  // Every line said since last asked.
+  const heard = async () => { await pl.waitForTimeout(250); await ready(); return pl.evaluate(() => window.heard.splice(0)); };
+  await pl.goto(base);
+  await ready();
+  assert.deepEqual(await pl.evaluate(() => [document.getElementById('status').getAttribute('aria-live'), document.getElementById('said').getAttribute('aria-live')]), [null, 'polite']);
+  await pl.evaluate(() => {
+    window.heard = [];
+    const el = document.getElementById('said');
+    new MutationObserver(() => { if (el.textContent) window.heard.push(el.textContent); }).observe(el, { childList: true, characterData: true, subtree: true });
+  });
+  await pl.evaluate(() => window.patience.newGame('k1', 11705));
+  await pl.waitForTimeout(1500);
+  assert.deepEqual(await heard(), ['Klondike, draw one, deal 11,705.']);
+  await pl.keyboard.press(' ');
+  assert.deepEqual(await heard(), ['Drew the ace of hearts. Up by themselves: the ace of hearts.'], 'one line for the draw and the card going up after it');
+  await pl.keyboard.press(' ');
+  assert.deepEqual(await heard(), ['Drew the 7 of spades.']);
+  await pl.keyboard.press('z');
+  assert.deepEqual(await heard(), ['Undone.']);
+  await pl.keyboard.press('z');
+  assert.deepEqual(await heard(), ['Undone.'], 'the same words again are said again');
+  await pl.evaluate(() => window.patience.newGame('fc', 617));
+  await pl.waitForTimeout(1500);
+  assert.deepEqual(await heard(), ['FreeCell, deal 617.']);
+  await pl.keyboard.press('h');
+  await pl.waitForSelector('.hint', { timeout: 20000 });
+  assert.deepEqual(await heard(), ['Hint: the queen of hearts onto the king of clubs.']);
+  await pl.keyboard.press('Enter');
+  assert.deepEqual(await heard(), ['Queen of hearts onto the king of clubs.']);
+  await pl.waitForTimeout(2500);
+  assert.deepEqual(await heard(), [], 'nothing while the clock runs');
+  assert.deepEqual(errors, [], 'errors saying what happened');
+  await cl.close();
+}
+
 // Tapping the card Hint lit up plays Hint's move, even where a tap would send it somewhere else, and the hint stays
 // lit until the next move. In FreeCell game 617 Hint's first move is the queen of hearts onto the king of clubs in the
 // third column, where a tap alone sends it to the second; in Klondike a card Hint wants back down off a foundation,
@@ -911,6 +955,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await pk.click('#b-hint');
   await pk.waitForFunction(() => document.getElementById('status').textContent === 'Thinking…', null, { timeout: 5000 });
+  await pk.waitForFunction(() => document.getElementById('said').textContent === 'Thinking…', null, { timeout: 2000 }); // and a screen reader hears it
   await pk.waitForSelector('.hint', { timeout: 60000 });
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
   assert.equal(await pk.textContent('#status'), 'Spider, four suits · Deal 35', 'back to the game and deal once Hint answered');

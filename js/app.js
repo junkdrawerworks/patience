@@ -7,6 +7,7 @@ import { cascade } from './win.js';
 import { suitSprite } from './suits.js';
 import { shortName } from './cards.js';
 import { guardEdges } from './edge-guard.js';
+import { moveWords, aftermath, upWords, hintWords } from './words.js';
 
 const KEY = 'patience.v1';
 const $ = id => document.getElementById(id);
@@ -53,7 +54,7 @@ const G = () => gameOf(game);
 document.body.prepend(suitSprite());
 const table = new Table($('table'), {
   stock: () => {
-    if (act(G().stock(game), true)) return;
+    if (act(G().stock(game), { stock: true })) return;
     const note = G().stockNote(game);
     if (!note) return;
     toast(note.text);
@@ -62,9 +63,9 @@ const table = new Table($('table'), {
   tap: (pile, n) => {
     if (pile[0] === 'f') return;
     const to = G().tapTarget(game, pile, n);
-    if (!to || !act(G().move(game, pile, n, to))) table.shake(pile, n);
+    if (!to || !act(G().move(game, pile, n, to), { from: pile, n, to })) table.shake(pile, n);
   },
-  move: (pile, n, to) => { if (!act(G().move(game, pile, n, to))) table.render(game); },
+  move: (pile, n, to) => { if (!act(G().move(game, pile, n, to), { from: pile, n, to })) table.render(game); },
   touched: deck => { if (!(deck && noting)) hideToast(); }, // a tap on the deck may be the draw Hint's note asks for
 });
 // A Back that comes while a card is held, or just after the browser took a touch away from the table (as Android's
@@ -75,30 +76,58 @@ const dealer = new Dealer(saved.next, () => write(), () => !!table.drag || table
 
 // ---- playing ----
 
-// Make a move the player asked for (`drew`: a tap on the deck). Returns false if there was nothing to do.
-// A won game is finished: it can be looked at, but not played on or undone, so it can't be won twice.
-function act(next, drew) {
+// Make a move the player asked for: `m` is { from, n, to }, or { stock: true } for a tap on the deck. Returns false if
+// there was nothing to do. A won game is finished: it can be looked at, but not played on or undone, so it can't be
+// won twice.
+function act(next, m) {
   if (!next || table.locked || over()) return false;
   cancelChain();
   table.clearHint();
   // Hint's note on the card it's drawing for goes with the hint, unless this is a draw and that card isn't up yet:
   // then the note stays, and the deck lights up again for the next draw.
-  const awaited = noting && drew ? drawingFor : null;
-  if (noting) hideToast();
+  const awaited = noting && m.stock ? drawingFor : null;
+  if (noting && awaited === null) hideToast();
   history.push(game);
   if (!counted) { counted = true; stats[next.v].played++; }
   startClock();
+  news = { said: [moveWords(G(), game, next, m)], up: [], later: [] };
   set(next);
-  if (awaited !== null && next.waste?.at(-1) !== awaited && !G().won(game)) drawFor(awaited);
+  if (awaited !== null) {
+    if (next.waste?.at(-1) !== awaited && !G().won(game)) drawFor(awaited, true);
+    else hideToast();
+  }
   return true;
 }
 
 // Hint is drawing for card c, further down the deck: light up the deck and say which card, until it turns up.
-function drawFor(c) {
+// (`again`: the note is showing already, and isn't read out again after each draw.)
+function drawFor(c, again) {
   table.showHint({ stock: true, c });
-  toast(`Draw for the ${shortName(c)}.`, [], 0);
+  if (!again) toast(`Draw for the ${shortName(c)}.`, [], 0);
   noting = true;
   drawingFor = c;
+}
+
+// ---- the line a screen reader reads out ----
+
+// What the player's last move did, said in one line once everything it set going has settled: the move, the cards that
+// went up by themselves after it, and anything turned over or cleared away on the way.
+let news = null;
+function tell(extra) {
+  if (!news) return;
+  const { said, up, later } = news;
+  news = null;
+  say([...said, up.length ? upWords(up) : '', ...later, extra || ''].filter(Boolean).join(' '));
+}
+
+// One line, read out by a screen reader. Emptied first and filled on the next frame, so the same words again are
+// read again. Only ever for something the player did, never the clock.
+let saying = 0;
+function say(text) {
+  const el = $('said');
+  cancelAnimationFrame(saying);
+  el.textContent = '';
+  saying = requestAnimationFrame(() => { el.textContent = text; });
 }
 
 function set(next) {
@@ -114,8 +143,8 @@ function set(next) {
 function after() {
   cancelChain(); // only one thing comes next
   const g = G();
-  if (g.won(game)) { recordWin(); chain = setTimeout(victory, 700); return; }
-  if (g.finishable(game)) { recordWin(); finish(); return; }
+  if (g.won(game)) { recordWin(); tell(); chain = setTimeout(victory, 700); return; }
+  if (g.finishable(game)) { recordWin(); tell('The rest go up by themselves.'); finish(); return; }
   if (settings.auto) {
     const step = g.autoStep(game);
     if (step) {
@@ -124,14 +153,16 @@ function after() {
         if (table.drag) { chain = setTimeout(go, 140); return; }
         chain = 0;
         const next = G() === g && g.move(game, step.from, step.n, step.to);
-        if (!next) return; // another game, or the card has gone
+        if (!next) { tell(); return; } // another game, or the card has gone
         next.moves = game.moves; // these aren't the player's moves
+        if (news) { news.up.push(...g.pile(game, step.from).up.slice(-step.n)); news.later.push(...aftermath(g, game, next)); }
         set(next);
       };
       chain = setTimeout(go, 140);
       return;
     }
   }
+  tell();
   if (counted) lookForMoves();
 }
 
@@ -168,10 +199,12 @@ function undo() {
   if (!history.length || table.locked || over()) return;
   cancelChain();
   hideToast();
+  news = null;
   game = history.pop();
   table.render(game);
   showInfo();
   write();
+  say('Undone.');
 }
 
 async function newGame(v, number) {
@@ -188,6 +221,7 @@ async function newGame(v, number) {
   slow = setTimeout(() => {
     const line = 'Shuffling for a deal that can be won…';
     $('status').textContent = line;
+    say(line);
     // With no game on the table yet (the first time it's opened), the felt says so too, so it doesn't look broken.
     if (!game) { $('wait').textContent = line; $('wait').hidden = false; }
   }, 250);
@@ -218,6 +252,8 @@ function start(state, again) {
   clearTimeout(landed);
   game = state;
   history = [];
+  news = null;
+  say(`${label(state.v)}, deal ${state.deal.toLocaleString('en-US')}.`);
   // Starting the same deal again part way through keeps its clock (stopped until the next move), so a fastest win counts
   // all the time spent on that deal, not just the last try. Once it's won, starting it again is a new game with a new clock.
   if (again && counted) stopClock();
@@ -242,7 +278,7 @@ async function hint() {
   pressed = false;
   $('b-hint').classList.add('busy');
   clearTimeout(slowHint);
-  slowHint = setTimeout(() => { if (game === at && !table.locked) $('status').textContent = THINKING; }, 700);
+  slowHint = setTimeout(() => { if (game === at && !table.locked) { $('status').textContent = THINKING; say(THINKING); } }, 700);
   let h;
   try {
     h = await hintFor(game, { auto: settings.auto });
@@ -258,8 +294,9 @@ async function hint() {
   }
   if (h.move) {
     // Drawing for a card further down the deck, only the deck lights up, so the note says which card.
+    // (That note is read out as it shows, so the line a screen reader reads says nothing more.)
     if (h.move.c !== undefined) drawFor(h.move.c);
-    else table.showHint(h.move);
+    else { table.showHint(h.move); say(hintWords(G(), game, h.move)); }
   } else if (h.lost) toast('Looks like there’s no way to win from here. Undo a few moves to try another way.', [['Undo', undo]]);
   else toast('There are no moves left.', [['New game', openNew]]);
 }
@@ -267,7 +304,7 @@ async function hint() {
 // Play the move Hint is showing (Enter): a tap on the deck, or those cards to where it says.
 function play(m) {
   if (m.stock) table.on.stock();
-  else act(G().move(game, m.from, m.n, m.to));
+  else act(G().move(game, m.from, m.n, m.to), m);
 }
 
 // ---- winning ----

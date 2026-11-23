@@ -63,6 +63,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `js/deals.js`: runs a solver a slice at a time, between frames, to find winnable deals and hints.
 - `js/table.js`: the table. Card sizes and layout for whichever game it is, the movement, tapping and dragging.
 - `js/win.js`: the bouncing cards.
+- `js/words.js`: what each move did, in a few words, for a screen reader to read out once it has settled.
 - `js/edge-guard.js`: keeps a Back that comes in the middle of a drag (a swipe near the side of a phone's screen) from closing the game.
 - `js/app.js`: the game itself: undo, the clock, the record, settings and saving.
 - `js/cards.js`, `js/suits.js`, `js/rng.js`: the cards, the four suit shapes, the seeded shuffle that turns a deal number into a deal, and Windows' FreeCell shuffle.

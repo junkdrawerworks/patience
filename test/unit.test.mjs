@@ -306,3 +306,31 @@ test('four-suit Spider deals from the list checked in advance come round once ea
   const next = await dealer.take('s4');
   assert.ok(FOUR_SUIT_DEALS.includes(next) && next !== dealt.at(-1), 'then round again, not starting with the last one');
 });
+
+test('the line a screen reader reads after a move says what moved, what turned over and what cleared away', async () => {
+  const { moveWords, upWords, hintWords } = await import('../js/words.js');
+  const { spider } = await import('../js/games/spider.js');
+  const { freecell } = await import('../js/games/freecell.js');
+  const { klondike } = await import('../js/games/klondike.js');
+  // Spider: the ace of spades onto a run from king to 2 clears it away, and turns over the card under the king.
+  const s = spider.deal(1, 's1');
+  s.tab[0] = { down: [card(H, 5)], up: Array.from({ length: 12 }, (_, i) => card(S, 13 - i)) };
+  s.tab[1] = { down: [], up: [52 + card(S, 1)] };
+  const b = spider.move(s, 't1', 1, 't0');
+  assert.equal(moveWords(spider, s, b, { from: 't1', n: 1, to: 't0' }), 'Ace of spades onto the 2 of spades. Spades cleared, 1 of 8. Turned over the 5 of hearts.');
+  assert.equal(moveWords(spider, s, spider.stock({ ...s, tab: s.tab.map(t => ({ ...t, up: t.up.length ? t.up : [card(S, 9)] })) }), { stock: true }), 'Dealt a row.');
+  assert.equal(hintWords(spider, s, { from: 't0', n: 3, to: 't1' }), 'Hint: the 4 of spades and 2 more onto the ace of spades.');
+  // FreeCell: a free cell, a foundation, an empty column.
+  const f = freecell.deal(617);
+  assert.equal(moveWords(freecell, f, freecell.move(f, 't3', 1, 'c0'), { from: 't3', n: 1, to: 'c0' }), '4 of hearts to a free cell.');
+  assert.equal(hintWords(freecell, f, { from: 't7', n: 1, to: 't2' }), 'Hint: the queen of hearts onto the king of clubs.');
+  // Klondike: drawing one and three, turning the pile back over, a hint to draw.
+  const k = klondike.deal(11705, 'k3');
+  assert.equal(moveWords(klondike, k, klondike.stock(k), { stock: true }), 'Drew three, with the 5 of clubs on top.');
+  const k1 = klondike.deal(11705, 'k1');
+  assert.equal(moveWords(klondike, k1, klondike.stock(k1), { stock: true }), 'Drew the ace of hearts.');
+  const out = { ...k1, stock: [], waste: k1.stock.slice().reverse() };
+  assert.equal(moveWords(klondike, out, klondike.stock(out), { stock: true }), 'Turned the pile back over.');
+  assert.equal(hintWords(klondike, k1, { stock: true }), 'Hint: draw a card.');
+  assert.equal(upWords([card(H, 1), card(H, 2), card(S, 1)]), 'Up by themselves: the ace and 2 of hearts and the ace of spades.');
+});
