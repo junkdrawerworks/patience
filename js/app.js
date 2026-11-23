@@ -601,7 +601,9 @@ document.addEventListener('keydown', e => {
   if (!$('sheet-new').hidden || !$('sheet-menu').hidden) { if (e.key === 'Escape') closeSheets(); return; }
   const k = e.key.toLowerCase();
   if (!$('won').hidden) {
-    // While the cards bounce, before the panel is up, Space, Enter or Escape brings it up, as a tap does.
+    // While the cards bounce, before the panel is up, Space, Enter or Escape brings it up, as a tap does. (Held down,
+    // it doesn't go on to press Deal again.)
+    if (e.repeat) { if (k === ' ' || k === 'enter') e.preventDefault(); return; }
     if ((k === ' ' || k === 'enter' || k === 'escape') && $('won').querySelector('.panel').hidden) { e.preventDefault(); showPanel(); }
     return;
   }
@@ -613,8 +615,9 @@ document.addEventListener('keydown', e => {
     focusTable();
     return;
   }
-  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } // held down, it keeps stepping back
   else if (e.ctrlKey || e.metaKey) return;
+  else if (e.repeat) { if (k === ' ' || k === 'enter') e.preventDefault(); } // the others, held down, do it once
   else if ((k === ' ' || k === 'enter') && keyFocus && e.target.closest?.('button, a, summary')) return; // the key presses it
   else if (k === ' ' || k === 'd') { e.preventDefault(); table.on.stock(); }
   else if (k === 'enter' && table.shown) { e.preventDefault(); play(table.shown); }

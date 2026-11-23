@@ -683,6 +683,17 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   // Escape takes the note away too.
   await p6.keyboard.press('Escape');
   assert.equal(await p6.isHidden('#toast'), true, 'Escape took the note away');
+  // A key held down does what it does once, so holding Space doesn't flick through the deck; Z keeps stepping back.
+  const drawn = (await now()).moves;
+  for (let i = 0; i < 4; i++) await p6.keyboard.down(' ');
+  await p6.keyboard.up(' ');
+  await ready();
+  assert.equal((await now()).moves, drawn + 1, 'holding Space drew one card');
+  for (let i = 0; i < 2; i++) { await p6.keyboard.press(' '); await ready(); }
+  for (let i = 0; i < 3; i++) await p6.keyboard.down('z');
+  await p6.keyboard.up('z');
+  await ready();
+  assert.equal((await now()).moves, drawn, 'holding Z undid all three');
 
   // Won, while the cards bounce, Enter brings the panel up rather than waiting for it; Enter then deals again, and the
   // table has focus, so Space and Enter are the game's again.
