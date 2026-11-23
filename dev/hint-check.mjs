@@ -1,6 +1,7 @@
 // Plays deals the way someone who always does what Hint says would: press Hint, make that move, let cards go up by
 // themselves (or not), and again, until the game is won. Counts the games won, and any that end with "no way to win",
-// a move the table refuses, or Hint leading back to a table it has already been at (round in circles for good).
+// a move the table refuses, Hint leading back to a table it has already been at (round in circles for good), or the
+// game saying no move can help at a table on the way to a win.
 //   node dev/hint-check.mjs [k1|k3|fc|s1|s2|s4] [deals] [on|off] [first deal]
 // Deals are the ones the game would hand out from the first deal number on: those its solver wins within its limit.
 import { VARIANTS } from '../js/games/index.js';
@@ -15,8 +16,8 @@ const settle = s => {
   return s;
 };
 
-const tally = { won: 0, lost: 0, refused: 0, circles: 0, unfinished: 0 };
-let presses = 0, slowest = 0;
+const tally = { won: 0, lost: 0, refused: 0, circles: 0, unfinished: 0, 'said out of moves': 0 };
+let presses = 0, slowest = 0, slowestOut = 0;
 for (let n = FIRST, played = 0; played < N; n++) {
   const check = game.search(game.deal(n, V));
   if (check.run(game.budget.deal) !== 'won') continue;
@@ -27,6 +28,10 @@ for (let n = FIRST, played = 0; played < N; n++) {
     if (game.won(s)) { end = 'won'; break; }
     if (seen.has(where(s))) { end = 'circles'; break; }
     seen.add(where(s));
+    const t1 = performance.now();
+    const out = game.outOfMoves(s, { auto: AUTO });
+    slowestOut = Math.max(slowestOut, performance.now() - t1);
+    if (out) { end = 'said out of moves'; break; }
     const t0 = performance.now();
     const h = await hintFor(s, { auto: AUTO });
     slowest = Math.max(slowest, performance.now() - t0);
@@ -39,4 +44,4 @@ for (let n = FIRST, played = 0; played < N; n++) {
   tally[end]++;
   if (end !== 'won') console.log(`deal ${n}: ${end}`);
 }
-console.log(`${V}, cards going up by themselves ${AUTO ? 'on' : 'off'}, ${N} deals:`, tally, `${presses} presses of Hint, slowest ${slowest.toFixed(0)} ms`);
+console.log(`${V}, cards going up by themselves ${AUTO ? 'on' : 'off'}, ${N} deals:`, tally, `${presses} presses of Hint, slowest ${slowest.toFixed(0)} ms; slowest look for a move that helps ${slowestOut.toFixed(0)} ms`);

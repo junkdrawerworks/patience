@@ -36,6 +36,26 @@ test('FreeCell deals match the numbered deals from Windows', () => {
   assert.equal(new Set(s.tab.flat()).size, 52);
 });
 
+test('FreeCell says so when the only move left goes back and forth, and not while a card can still go up', () => {
+  // Deal 3001, a long way in: the four free cells hold the 3 of clubs, king of diamonds, 8 of spades and 2 of clubs, and
+  // the only move is the 10 of spades from the seventh column onto the jack of diamonds in the second, and back.
+  const s = {
+    v: 'fc', deal: 3001, moves: 1500, cells: [28, 51, 7, 27], found: [[39, 40, 41, 42, 43, 44, 45, 46], [], [], []],
+    tab: [[15, 30, 16, 0, 5, 13, 38, 24, 10, 22, 34], [21, 1, 37, 49], [17, 47, 48, 8, 20, 32], [33, 19, 31], [50, 29, 6, 18, 4],
+      [14, 26, 36], [3, 2, 35, 25, 11, 23, 9], [12]],
+  };
+  assert.deepEqual(s.cells.map(name), ['3C', 'KD', '8S', '2C']);
+  const there = freecell.move(s, 't6', 1, 't1');
+  assert.ok(there && freecell.move(there, 't1', 1, 't6'), 'the 10 can go there and back');
+  assert.equal(freecell.outOfMoves(s), true);
+  assert.equal(freecell.outOfMoves(there), true);
+  assert.equal(freecell.deadEnd(s).none, false, 'a move is left, just none that helps');
+  assert.equal(freecell.search(s).run(1000), 'lost', 'and the solver agrees it can’t be won');
+  // With the ace of clubs up instead of under the jack, the 2 and 3 of clubs can follow it from the free cells.
+  const t = { ...s, tab: s.tab.map((c, i) => (i === 5 ? [14, 36] : c)), found: [s.found[0], [26], [], []] };
+  assert.equal(freecell.outOfMoves(t), false);
+});
+
 test('FreeCell runs move only as far as free cells and empty columns allow', () => {
   const s = emptyFC();
   s.tab[0] = [card(S, 9), card(H, 8), card(C, 7), card(D, 6), card(S, 5)];
@@ -169,6 +189,21 @@ test("Spider won't deal a row while a column is empty", () => {
   assert.ok(next.tab.every((t, i) => t.up.length === s.tab[i].up.length + 1));
 });
 
+test('Spider with fewer cards on the table than columns and a row left is out of moves, and the deck says why', () => {
+  // Seven runs cleared, the king, queen and jack of the last one on the table, and the rest of it still to be dealt.
+  const run = copy => Array.from({ length: 13 }, (_, r) => copy * 52 + r);
+  const tab = Array.from({ length: 10 }, () => ({ down: [], up: [] }));
+  tab[0].up = [7 * 52 + 12]; tab[1].up = [7 * 52 + 11]; tab[2].up = [7 * 52 + 10];
+  const s = { v: 's1', deal: 1, moves: 300, tab, stock: Array.from({ length: 10 }, (_, r) => 7 * 52 + r), sets: [0, 1, 2, 3, 4, 5, 6].map(run) };
+  assert.equal(spider.stock(s), null, 'no row can be dealt');
+  assert.equal(spider.outOfMoves(s), true);
+  assert.equal(spider.deadEnd(s).none, false, 'the cards can still move about');
+  assert.equal(spider.stockNote(s), 'There aren’t enough cards left to fill every column, so this row can’t be dealt.');
+  // With ten cards on the table, they can always be spread one to a column, and the row dealt.
+  const ten = { ...s, tab: s.tab.map((t, i) => ({ down: [], up: [i < 3 ? t.up[0] : 6 * 52 + i] })), sets: s.sets.slice(0, 6), stock: s.stock };
+  assert.equal(spider.outOfMoves(ten), false);
+});
+
 for (const [v, n, count] of [['s1', 8, 7], ['s2', 4, 3]]) {
   test(`Spider's solver wins are real wins (${VARIANTS[v].detail})`, () => {
     let wins = 0;
@@ -242,6 +277,16 @@ test('Spider is out of moves when cards can only go back and forth, and Hint say
   assert.ok(spider.move(s, 't0', 1, 't1'), 'the 7 can move');
   assert.equal(spider.outOfMoves(s), true);
   assert.deepEqual(await hintFor(s), { lost: true });
+});
+
+test('Spider is out of moves when it takes a long look to be sure nothing helps', () => {
+  // One suit, deal 68,977 played at random until nothing is left to deal: about a thousand tables can be reached by
+  // moving cards about, and none of them turns a card over, clears a run or empties a column.
+  const s = {"v":"s1","deal":68977,"tab":[{"down":[369,371,114,322,372],"up":[113,315,8,111,318]},{"down":[63,211,264,376],"up":[212,12,108,3,54,105]},{"down":[161,367,156,316,216],"up":[56,165,319,263,210]},{"down":[374,10,219,266],"up":[6,373,366,157,62,268,215,214,109,160,107,106,209,52]},{"down":[321,53,1,116],"up":[272]},{"down":[2,9,0,5],"up":[115,60,370]},{"down":[168,317,269],"up":[164]},{"down":[163,4,166,167],"up":[7,265,112,57,208,262,365]},{"down":[220,375,159,61],"up":[58,312,64,323,270]},{"down":[11,267,110],"up":[260,158,261,104]}],"stock":[],"sets":[[364,313,314,55,368,213,162,59,320,217,218,271,324]],"moves":106};
+  assert.equal(new Set([...s.tab.flatMap(t => [...t.down, ...t.up]), ...s.sets.flat()]).size, 104, 'every card once');
+  assert.equal(spider.deadEnd(s).run(400), 'unknown', 'a short look can’t tell');
+  assert.equal(spider.outOfMoves(s), true);
+  assert.equal(spider.deadEnd(s).none, false);
 });
 
 test('a Spider run moved onto a card of the other suit counts when it uncovers cards that can go somewhere', () => {

@@ -1,5 +1,5 @@
-// Finding deals that can be won, and the Hint button's search. Both run a solver a slice at a time
-// between frames, so the cards keep moving while it thinks.
+// Finding deals that can be won, the Hint button's search, and the look for a move that can still help. All run a
+// search a slice at a time between frames, so the cards keep moving while it thinks.
 
 import { VARIANTS, gameOf } from './games/index.js';
 import { FOUR_SUIT_DEALS } from './games/spider-deals.js';
@@ -27,6 +27,15 @@ function think(search, max, wait) {
     };
     tick();
   });
+}
+
+// Whether anything can still help from here (the game's deadEnd), looked at a slice at a time. Resolves with the look:
+// its result is 'dead' once it's sure nothing can, and none says there's no move at all. While `wait()` says so, it
+// waits, like think(); once `stale()` says the answer isn't wanted any more (another move made), it stops.
+export async function deadEnd(state, { auto = true } = {}, { wait, stale } = {}) {
+  const game = gameOf(state), look = game.deadEnd(state, { auto });
+  if (!look.result) await think({ get nodes() { return look.nodes; }, step: n => (stale?.() ? 'stale' : look.step(n)) }, game.budget.dead, wait);
+  return look;
 }
 
 // Keeps a winnable deal ready for the way you're playing, so New game doesn't have to wait.

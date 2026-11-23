@@ -7,7 +7,7 @@
 
 import { suitOf, rankOf } from '../cards.js';
 import { shuffle } from '../rng.js';
-import { SpiderSearch, SpiderSure, stuck } from '../solvers/spider.js';
+import { SpiderSearch, SpiderSure, SpiderStuck } from '../solvers/spider.js';
 
 const T = Array.from({ length: 10 }, (_, i) => 't' + i);
 const SUITS = { s1: [0], s2: [0, 1], s4: [0, 1, 2, 3] };
@@ -116,8 +116,9 @@ export const spider = {
   },
 
   stockNote(s) {
-    if (!s.stock.length) return null;
-    return s.tab.some(t => !t.up.length && !t.down.length) ? 'Put a card in every empty column before dealing a new row.' : null;
+    if (!s.stock.length || !s.tab.some(t => !t.up.length && !t.down.length)) return null;
+    if (s.tab.reduce((n, t) => n + t.down.length + t.up.length, 0) < 10) return 'There aren’t enough cards left to fill every column, so this row can’t be dealt.';
+    return 'Put a card in every empty column before dealing a new row.';
   },
 
   // A tap sends a run onto a card one higher of its own suit if there is one, then any card one higher,
@@ -160,12 +161,10 @@ export const spider = {
     return { from: T[m.a], n: t.down.length + t.up.length - m.i, to: T[m.b] };
   },
 
-  // Nothing useful left: no row to deal, and nothing to do but move cards back and forth. Every move counts,
-  // splitting a run too, since one that seldom helps can still be the only way to turn a card over or clear a run.
-  outOfMoves(s) {
-    if (s.stock.length) return false;
-    return stuck(spider.position(s));
-  },
+  // Whether anything can still help: a row to deal, or a move or string of moves that turns a card over, clears a run or
+  // empties a column. Every move counts, splitting a run too, since one that seldom helps can still be the only way.
+  deadEnd(s) { return new SpiderStuck(spider.position(s)); },
+  outOfMoves: s => spider.deadEnd(s).run(spider.budget.dead) === 'dead',
 
   // The cleared runs come down off the table kings first, the last one cleared first.
   bounceOrder(s) {
@@ -186,5 +185,6 @@ export const spider = {
   randomDeal: () => 1 + Math.floor(Math.random() * 999999),
   // Hint gets as long as a deal was checked for, so its first press on a new deal finds the way through. Making sure
   // there's no way to win, the first half of `all` goes to the quick moves with spreading, the rest to every move.
-  budget: { deal: 120000, hint: 120000, all: 40000 },
+  // Making sure nothing can help, `dead` goes to looking at every table the moves reach.
+  budget: { deal: 120000, hint: 120000, all: 40000, dead: 20000 },
 };

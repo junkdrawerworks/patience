@@ -8,6 +8,7 @@
 import { suitOf, rankOf, stacks, fits, safeUp } from '../cards.js';
 import { freecellDeal } from '../rng.js';
 import { FreeCellSearch, freecellRules } from '../solvers/freecell.js';
+import { Progress } from '../solvers/best-first.js';
 
 const T = Array.from({ length: 8 }, (_, i) => 't' + i);
 const C = ['c0', 'c1', 'c2', 'c3'];
@@ -168,11 +169,18 @@ export const freecell = {
 
   upAlready: (s, m) => (m.k === 'tf' || m.k === 'cf') && s.found.some(f => f.includes(m.c)),
 
-  // No move of any kind is left.
-  outOfMoves(s) {
-    const { state, autos } = freecellRules.start(freecell.position(s));
-    return !autos.length && freecellRules.moves(state).length === 0;
+  // Whether anything can still help. With a free cell or an empty column there's always somewhere new to put a card,
+  // so it looks only when all four cells are full and no column is empty: at every table the moves reach, for one
+  // with a card gone up, a cell free or a column empty. The usual way a game ends is one card going back and forth.
+  deadEnd(s) {
+    const p = freecell.position(s);
+    const up = p.found.reduce((a, b) => a + b, 0);
+    const room = t => t.cells.includes(-1) || t.tab.some(c => !c.length);
+    const d = new Progress(freecellRules, p, { helps: t => t.found.reduce((a, b) => a + b, 0) > up || room(t) });
+    if (!d.result && !d.none && room(p)) d.result = 'live';
+    return d;
   },
+  outOfMoves: s => freecell.deadEnd(s).run(freecell.budget.dead) === 'dead',
 
   bounceOrder(s) {
     const out = [];
@@ -186,5 +194,5 @@ export const freecell = {
 
   // The deals numbered 1 to 32,000, as Windows numbered them.
   randomDeal: () => 1 + Math.floor(Math.random() * 32000),
-  budget: { deal: 100000, hint: 200000 },
+  budget: { deal: 100000, hint: 200000, dead: 1000 },
 };

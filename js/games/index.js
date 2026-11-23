@@ -31,11 +31,16 @@
 //   fromSolver(s, m)        a solver move as a table move: { from, n, to }, or { stock: true } (Klondike adds c, the card
 //                           it's drawing for; so does its easyHint)
 //   upAlready(s, m)         whether a solver move sending a card up is done already, the card having gone up by itself
-//   outOfMoves(s, { auto }) nothing useful left to do
+//   deadEnd(s, { auto })    a look for anything that can still help, run a slice at a time like the searches
+//                           (step(budget), nodes, run(max)): result 'dead' once it's sure nothing can (no line of moves
+//                           puts a card up, turns one over, frees a cell, empties a column or deals a row), 'live' once
+//                           something does; none says there's no move at all. At its limit it can't say, which isn't dead
+//   outOfMoves(s, { auto }) deadEnd run to its limit at once: true only if it's sure nothing can help
 //   bounceOrder(s)          the cards in the order they bounce off the table when it's won
 //   dealOrder(s)            the cards in the order they're dealt, for the dealing animation
 //   randomDeal()            a deal number
-//   budget                  how many positions the solver may look at: { deal, hint }, and { all } for searchAll
+//   budget                  how many positions the solver may look at: { deal, hint }, { all } for searchAll, and
+//                           { dead } for deadEnd
 
 import { klondike } from './klondike.js';
 import { freecell } from './freecell.js';

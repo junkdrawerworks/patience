@@ -2,7 +2,7 @@
 
 import { VARIANTS, gameOf, label } from './games/index.js';
 import { Table } from './table.js';
-import { Dealer, hintFor, primeLine } from './deals.js';
+import { Dealer, hintFor, primeLine, deadEnd } from './deals.js';
 import { cascade } from './win.js';
 import { suitSprite } from './suits.js';
 import { shortName } from './cards.js';
@@ -132,9 +132,17 @@ function after() {
       return;
     }
   }
-  if (counted && g.outOfMoves(game, { auto: settings.auto })) {
-    toast('There are no moves left.', [['Undo', undo], ['New game', openNew]]);
-  }
+  if (counted) lookForMoves();
+}
+
+// Once nothing can help, say so: no move at all, or none that leads anywhere. The look can take a while in Spider, so
+// it runs a slice at a time, and says nothing if another move has been made (or undone) by the time it knows.
+let looking = 0;
+async function lookForMoves() {
+  const at = game, ticket = ++looking, stale = () => ticket !== looking || game !== at;
+  const d = await deadEnd(game, { auto: settings.auto }, { wait: () => !!table.drag || table.locked, stale });
+  if (stale() || over() || d.result !== 'dead') return;
+  toast(d.none ? 'There are no moves left.' : 'There are no moves left that help.', [['Undo', undo], ['New game', openNew]]);
 }
 
 function cancelChain() { clearTimeout(chain); chain = 0; }

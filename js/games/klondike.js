@@ -5,7 +5,7 @@
 
 import { suitOf, rankOf, stacks, fits, safeUp } from '../cards.js';
 import { shuffled } from '../rng.js';
-import { Search } from '../solvers/klondike.js';
+import { Search, Progress } from '../solvers/klondike.js';
 
 export const TABLEAU = ['t0', 't1', 't2', 't3', 't4', 't5', 't6'];
 export const FOUNDATIONS = ['f0', 'f1', 'f2', 'f3'];
@@ -236,22 +236,10 @@ export function easyHint(s) {
   return { stock: true };
 }
 
-// Is there anything useful left to do? Shuffling a run from one column to another doesn't count,
-// unless it would empty a column for a king that's waiting. Nor do the moves the solver leaves out because they
-// seldom help, unless a quick look with every move finds they're the way through.
-export function outOfMoves(s, { auto = true } = {}) {
-  const p = forSolver(s, auto);
-  const search = new Search(p);
-  if (search.result === 'won' || search.rootAutos.length) return false;
-  const moves = search.rootMoves;
-  const shuffle = m => m.k === 1 && p.tab[m.a].length - m.n === 0;
-  if (moves.some(m => !shuffle(m))) return false;
-  const kingWaiting = moves.length && (
-    p.talon.some(c => c % 13 === 12) ||
-    p.tab.some((t, a) => p.down[a] > 0 && t.length > p.down[a] && t[p.down[a]] % 13 === 12));
-  if (kingWaiting) return false;
-  return new Search(p, { every: true }).run(5000) !== 'won';
-}
+// Whether anything can still help: a line of moves, any moves at all, that puts a card up or turns one over.
+// Drawing is part of every line, since the solver offers each card the stock can reach as a move of its own.
+export const deadEnd = (s, { auto = true } = {}) => new Progress(forSolver(s, auto));
+export const outOfMoves = (s, opts) => deadEnd(s, opts).run(klondike.budget.dead) === 'dead';
 
 // Klondike for the table (see games/index.js for what each part is for).
 export const klondike = {
@@ -296,6 +284,7 @@ export const klondike = {
   lostStands: true,
   fromSolver,
   upAlready: (s, m) => (m.k === 0 || m.k === 2) && s.found.some(f => f.includes(m.c)),
+  deadEnd,
   outOfMoves,
 
   bounceOrder(s) {
@@ -311,5 +300,5 @@ export const klondike = {
   },
 
   randomDeal: () => 1 + Math.floor(Math.random() * 999999),
-  budget: { deal: 100000, hint: 300000, all: 50000 },
+  budget: { deal: 100000, hint: 300000, all: 50000, dead: 3000 },
 };

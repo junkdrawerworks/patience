@@ -9,7 +9,7 @@
 // Moves are { a, i, b }: the cards from position i of column a up to its top, onto column b.
 // Or { deal: true }: a row from the stock, one card on each column.
 
-import { BestFirst } from './best-first.js';
+import { BestFirst, Progress } from './best-first.js';
 import { suitOf, rankOf } from '../cards.js';
 
 const top = a => a[a.length - 1];
@@ -146,27 +146,18 @@ const spreading = {
   },
 };
 
-// Nothing to do but move cards back and forth: no move, or string of moves, turns a card over, clears a run or
-// empties a column. Tries every move, splitting runs too. Gives up and says no after `cap` positions.
-export function stuck(position, cap = 400) {
-  const { state } = rules.start(position);
-  const downs = s => s.down.reduce((a, b) => a + b, 0), empties = s => s.tab.filter(t => !t.length).length;
-  const sets = state.sets, d0 = downs(state), e0 = empties(state);
-  const seen = new Set([rules.key(state)]), todo = [state];
-  while (todo.length) {
-    const s = todo.pop();
-    for (const m of everyMove.moves(s)) {
-      if (m.deal) return false;
-      const next = rules.apply(s, m).state;
-      if (next.sets > sets || downs(next) < d0 || empties(next) > e0) return false;
-      const k = rules.key(next);
-      if (seen.has(k)) continue;
-      if (seen.size >= cap) return false;
-      seen.add(k);
-      todo.push(next);
-    }
+// Whether anything can still help (see Progress in best-first.js): a row to deal, or any move, or string of moves,
+// that turns a card over, clears a run or empties a column. Tries every move, splitting runs too.
+// With a row still to deal it needn't look: the row can come once every column has a card, which ten cards on the table
+// can always manage, spread one to a column. With fewer than ten, it never can, and nothing else can help either.
+export class SpiderStuck extends Progress {
+  constructor(position) {
+    const { state } = rules.start(position);
+    const downs = s => s.down.reduce((a, b) => a + b, 0), empties = s => s.tab.filter(t => !t.length).length;
+    const sets = state.sets, d0 = downs(state), e0 = empties(state);
+    super(everyMove, position, { helps: (s, m) => !!m.deal || s.sets > sets || downs(s) < d0 || empties(s) > e0 });
+    if (state.stock.length) this.result = state.tab.reduce((n, t) => n + t.length, 0) < 10 ? 'dead' : 'live';
   }
-  return true;
 }
 
 // Take away a finished king-to-ace run of one suit from the top of column a.

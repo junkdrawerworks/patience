@@ -325,6 +325,50 @@ export class Search {
   }
 }
 
+// Whether anything can still help: every move from here, and from where each leads, looking for a line that puts a card
+// up or turns one over, the way Progress in best-first.js does for the others. A card taken back down from a foundation
+// and put up again isn't progress, so it goes by how far each foundation has got rather than by the moves. result is 'dead' once it has looked
+// everywhere and nothing ever helps, 'live' once something does, or null while still looking; none says there's no move
+// at all, not even a draw. Runs a slice at a time with step(), and run(max) answers 'unknown' at max.
+export class Progress extends Search {
+  constructor(p) {
+    super(p, { every: true });
+    if (this.result || this.rootAutos.length) { this.result = 'live'; return; }
+    this.downs0 = this.downs();
+    this.found0 = this.found.slice();
+    this.none = !this.talon.length && !this.rootMoves.length;
+  }
+
+  downs() { return this.down.reduce((a, b) => a + b, 0); }
+  higher() { return this.found.some((n, i) => n > this.found0[i]); }
+
+  step(budget) {
+    if (this.result) return this.result;
+    const stop = this.nodes + budget;
+    const stack = this.stack;
+    while (stack.length) {
+      if (this.nodes >= stop) return null;
+      const f = stack[stack.length - 1];
+      if (f.i >= f.moves.length) {
+        stack.pop();
+        if (f.via) { this.undoAll(f.autos); this.undo(f.via); }
+        continue;
+      }
+      const m = f.moves[f.i++];
+      this.apply(m);
+      const autos = this.autos();
+      if (autos.length || this.downs() < this.downs0 || this.higher()) { this.result = 'live'; return this.result; }
+      const k = this.key();
+      if (this.seen.has(k)) { this.undo(m); continue; }
+      this.seen.add(k);
+      this.nodes++;
+      stack.push({ moves: this.moves(), i: 0, via: m, autos });
+    }
+    this.result = 'dead';
+    return this.result;
+  }
+}
+
 function mix(h) {
   h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
   h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);

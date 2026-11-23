@@ -1147,6 +1147,56 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c15.close();
 }
 
+// Once no move can help, the game says so after the move, with Undo and New game: in FreeCell with one card going back
+// and forth (deal 3001), in Spider with too few cards on the table to deal the last row, and in Spider where it takes a
+// look at about a thousand tables, a slice at a time, to be sure (deal 68,977). Undo takes the message away.
+{
+  const c18 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const p18 = await c18.newPage();
+  const ready = () => p18.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await p18.goto(base);
+  await ready();
+  const told = async (text, why) => {
+    await p18.waitForSelector('#toast:not([hidden])', { timeout: 5000 });
+    assert.equal(await p18.textContent('#toast'), text + 'UndoNew game', why);
+  };
+  const fc = { v: 'fc', deal: 3001, moves: 1500, cells: [28, 51, 7, 27], found: [[39, 40, 41, 42, 43, 44, 45, 46], [], [], []],
+    tab: [[15, 30, 16, 0, 5, 13, 38, 24, 10, 22, 34], [21, 1, 37, 49, 9], [17, 47, 48, 8, 20, 32], [33, 19, 31], [50, 29, 6, 18, 4],
+      [14, 26, 36], [3, 2, 35, 25, 11, 23], [12]] };
+  await p18.evaluate(s => window.patience.load(s), fc);
+  await ready();
+  assert.equal(await p18.isHidden('#toast'), true, 'nothing said before a move');
+  await p18.click('.card[data-c="9"]', { position: { x: 12, y: 10 } });
+  await told('There are no moves left that help.', 'FreeCell, the 10 of spades back and forth');
+  await p18.click('#toast button:text("Undo")');
+  assert.equal(await p18.isHidden('#toast'), true);
+  assert.deepEqual((await p18.evaluate(() => window.patience.state)).tab[1].slice(-1), [9], 'the 10 is back on the jack');
+
+  const tab = Array.from({ length: 10 }, (_, i) => ({ down: [], up: i < 3 ? [7 * 52 + 12 - i] : [] }));
+  const few = { v: 's1', deal: 1, moves: 300, tab, stock: Array.from({ length: 10 }, (_, r) => 7 * 52 + r),
+    sets: Array.from({ length: 7 }, (_, k) => Array.from({ length: 13 }, (_, r) => k * 52 + r)) };
+  await p18.evaluate(s => window.patience.load(s), few);
+  await ready();
+  await p18.click(`.card[data-c="${7 * 52 + 10}"]`, { position: { x: 8, y: 8 } });
+  await told('There are no moves left that help.', 'Spider, three cards and a row left');
+  await p18.click('.spot[data-pile="stock"]', { force: true });
+  await p18.waitForFunction(() => document.getElementById('toast').textContent.startsWith('There aren’t'));
+  assert.equal(await p18.textContent('#toast'), 'There aren’t enough cards left to fill every column, so this row can’t be dealt.');
+
+  const stuck = {"v":"s1","deal":68977,"tab":[{"down":[369,371,114,322,372],"up":[113,315,8,111,318]},{"down":[63,211,264,376],"up":[212,12,108,3,54,105]},{"down":[161,367,156,316,216],"up":[56,165,319,263,210]},{"down":[374,10,219,266],"up":[6,373,366,157,62,268,215,214,109,160,107,106,209,52]},{"down":[321,53,1,116],"up":[272]},{"down":[2,9,0,5],"up":[115,60,370]},{"down":[168,317,269],"up":[164]},{"down":[163,4,166,167],"up":[7,265,112,57,208,262,365]},{"down":[220,375,159,61],"up":[58,312,64,323,270]},{"down":[11,267,110],"up":[260,158,261,104]}],"stock":[],"sets":[[364,313,314,55,368,213,162,59,320,217,218,271,324]],"moves":106};
+  await p18.evaluate(s => window.patience.load(s), stuck);
+  await ready();
+  const c = await p18.evaluate(async () => {
+    const { spider } = await import('./js/games/spider.js');
+    const s = window.patience.state;
+    const from = s.tab.findIndex((t, i) => spider.tapTarget(s, 't' + i, 1));
+    return s.tab[from].up.at(-1);
+  });
+  await p18.click(`.card[data-c="${c}"]`, { position: { x: 8, y: 8 } });
+  await told('There are no moves left that help.', 'Spider, after a long look');
+  await c18.close();
+}
+
 // Start this deal again is offered only once there's something to start again: not on a fresh deal.
 {
   const c16 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });

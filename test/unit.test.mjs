@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { card, safeUp, stacks, fits, suitOf } from '../js/cards.js';
-import { deal, draw, move, canDrop, bestTarget, autoStep, won, finishable, finishStep, forSolver, fromSolver, easyHint, foundationFor, foundCounts, outOfMoves, TABLEAU, FOUNDATIONS } from '../js/games/klondike.js';
+import { deal, draw, move, canDrop, bestTarget, autoStep, won, finishable, finishStep, forSolver, fromSolver, easyHint, foundationFor, foundCounts, outOfMoves, deadEnd, TABLEAU, FOUNDATIONS } from '../js/games/klondike.js';
 import { solve, Search } from '../js/solvers/klondike.js';
 import { hintFor } from '../js/deals.js';
 
@@ -260,6 +260,24 @@ test('a deal with no moves from the start is out of moves, and the solver calls 
   assert.equal(outOfMoves(s), true);
   assert.equal(solve(forSolver(s)).result, 'lost');
   assert.equal(outOfMoves(deal(905, 1)), false, 'one at a time, the same cards have moves');
+});
+
+test('a dead end is out of moves even with a card that can still go onto a column', () => {
+  // Deal 22,124 drawing one, 55 moves in: the 2 of spades is under three face-down cards and the 10 of hearts, and
+  // nothing can ever turn them over. The 4 of clubs from the deck can go onto the 5 of hearts, which helps nothing.
+  const s = {
+    v: 'k1', deal: 22124, draw: 1, fan: 1, moves: 55, stock: [20, 46, 34, 2, 10, 16], waste: [43, 29, 3, 50, 12, 24, 38, 8, 45],
+    found: [[13, 14], [26, 27], [0], [39, 40]],
+    tab: [[[], [49, 35, 47]], [[11], [6, 44]], [[41], [51]], [[], [32]], [[15, 33, 28], [36]], [[1, 22, 48, 18], [25, 37, 23, 9, 21]], [[42, 30, 5, 4, 7], [19, 31, 17]]]
+      .map(([down, up]) => ({ down, up })),
+  };
+  assert.equal(outOfMoves(s), true);
+  assert.equal(solve(forSolver(s)).result, 'lost');
+  assert.equal(deadEnd(s).none, false, 'there are moves, just none that helps');
+  // With the 2 of spades on the waste and the 7 of diamonds face down in its place, it can go up.
+  const t = { ...s, waste: [...s.waste.slice(0, -1), card(S, 2)], tab: s.tab.map((c, i) => (i === 5 ? { down: [card(D, 7), 22, 48, 18], up: c.up } : c)) };
+  assert.equal(s.waste.at(-1), card(D, 7));
+  assert.equal(outOfMoves(t), false);
 });
 
 test('a king with cards under it can still move to an empty column', () => {

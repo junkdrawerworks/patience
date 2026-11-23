@@ -82,6 +82,55 @@ export class BestFirst {
   }
 }
 
+// Whether anything can still help: a look at every position the moves reach from here, stopping as soon as one
+// makes progress, by the game's own measure (helps(state, move); a card going up by itself always counts). It takes the
+// same game parts as BestFirst, less score and done, and can be given moves of its own. result is 'dead' once it has
+// looked everywhere and nothing ever helps, 'live' once something does, or null while still looking; none says no move
+// was possible at all. Like the searches, it runs a slice at a time with step(), and run(max) answers 'unknown' at max.
+export class Progress {
+  constructor(game, position, { moves = game.moves, helps }) {
+    this.game = game;
+    this.moves = moves;
+    this.helps = helps;
+    this.nodes = 0;
+    this.result = null;
+    const { state, autos } = game.start(position);
+    this.root = state;
+    this.seen = new Set([game.key(state)]);
+    this.todo = [state];
+    this.none = !autos.length && !moves(state).length;
+    if (autos.length) this.result = 'live';
+  }
+
+  step(budget) {
+    if (this.result) return this.result;
+    const g = this.game, stop = this.nodes + budget;
+    while (this.todo.length) {
+      if (this.nodes >= stop) return null;
+      const s = this.todo.pop();
+      for (const m of this.moves(s)) {
+        const { state, autos } = g.apply(s, m);
+        if (autos.length || this.helps(state, m)) { this.result = 'live'; return this.result; }
+        const k = g.key(state);
+        if (this.seen.has(k)) continue;
+        this.seen.add(k);
+        this.nodes++;
+        this.todo.push(state);
+      }
+    }
+    this.result = 'dead';
+    return this.result;
+  }
+
+  run(max) {
+    while (!this.result) {
+      if (this.nodes >= max) return 'unknown';
+      this.step(Math.min(5000, max - this.nodes));
+    }
+    return this.result;
+  }
+}
+
 function pathTo(node) {
   const chain = [];
   for (let n = node; n; n = n.parent) chain.push(n);
