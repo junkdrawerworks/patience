@@ -50,6 +50,11 @@ function clear(s, t) {
 }
 
 const isRun = cards => cards.every((c, i) => i === 0 || follows(c, cards[i - 1]));
+// How many cards each column holds, face down and up.
+const sizes = s => s.tab.map(t => t.down.length + t.up.length);
+// A row can be dealt once every column has a card, or, with fewer cards on the table than columns, once each of them
+// has a column to itself.
+const canDeal = s => { const n = sizes(s); return n.every(k => k > 0) || (n.reduce((a, b) => a + b, 0) < 10 && n.every(k => k < 2)); };
 // How many cards at the top of a column's face-up cards make a run of one suit.
 const runOn = up => { let n = up.length ? 1 : 0; while (n < up.length && follows(up[up.length - n], up[up.length - n - 1])) n++; return n; };
 
@@ -107,9 +112,10 @@ export const spider = {
     return next;
   },
 
-  // Deal a row: one card face up on every column. Not while a column is empty.
+  // Deal a row: one card face up on every column. Not while a column is empty, unless there are too few cards to fill
+  // them all and each has a column to itself.
   stock(s) {
-    if (!s.stock.length || s.tab.some(t => !t.up.length && !t.down.length)) return null;
+    if (!s.stock.length || !canDeal(s)) return null;
     const next = clone(s);
     for (const t of next.tab) t.up.push(next.stock.pop());
     for (const t of next.tab) clear(next, t);
@@ -119,8 +125,8 @@ export const spider = {
 
   stockNote(s) {
     const empty = T.filter((id, i) => !s.tab[i].up.length && !s.tab[i].down.length);
-    if (!s.stock.length || !empty.length) return null;
-    if (s.tab.reduce((n, t) => n + t.down.length + t.up.length, 0) < 10) return { text: 'There aren’t enough cards left to fill every column, so this row can’t be dealt.', piles: [] };
+    if (!s.stock.length || canDeal(s)) return null;
+    if (sizes(s).reduce((a, b) => a + b, 0) < 10) return { text: 'With fewer than ten cards left, give each one a column of its own before dealing a new row.', piles: empty };
     return { text: 'Put a card in every empty column before dealing a new row.', piles: empty };
   },
 

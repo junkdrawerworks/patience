@@ -3,7 +3,8 @@
 //
 // It takes the position from spider.js:
 //   tab[i]   the cards in column i, bottom to top; the first down[i] of them are face down
-//   stock    the cards still to deal, the last ten being the next row
+//   stock    the cards still to deal, the last ten being the next row (dealt once every column has a card, or with
+//            fewer than ten cards on the table, once each has a column to itself)
 //   sets     how many king-to-ace runs have been cleared away
 //
 // Moves are { a, i, b }: the cards from position i of column a up to its top, onto column b.
@@ -14,6 +15,9 @@ import { suitOf, rankOf } from '../cards.js';
 
 const top = a => a[a.length - 1];
 const follows = (c, under) => suitOf(c) === suitOf(under) && rankOf(under) === rankOf(c) + 1;
+// Whether a row can be dealt: there is one, and every column has a card or, with fewer cards on the table than
+// columns, each of them has a column to itself.
+const canDeal = s => s.stock.length > 0 && (s.tab.every(t => t.length) || (s.tab.every(t => t.length < 2) && s.tab.reduce((n, t) => n + t.length, 0) < 10));
 
 const rules = {
   start(p) {
@@ -62,7 +66,7 @@ const rules = {
         }
       }
     }
-    if (s.stock.length && firstEmpty < 0) out.push({ deal: true });
+    if (canDeal(s)) out.push({ deal: true });
     return out;
   },
 
@@ -114,7 +118,7 @@ const everyMove = {
         }
       }
     }
-    if (s.stock.length && firstEmpty < 0) out.push({ deal: true });
+    if (canDeal(s)) out.push({ deal: true });
     return out;
   },
 };
@@ -149,14 +153,14 @@ const spreading = {
 // Whether anything can still help (see Progress in best-first.js): a row to deal, or any move, or string of moves,
 // that turns a card over, clears a run or empties a column. Tries every move, splitting runs too.
 // With a row still to deal it needn't look: the row can come once every column has a card, which ten cards on the table
-// can always manage, spread one to a column. With fewer than ten, it never can, and nothing else can help either.
+// can always manage, spread one to a column, or with fewer than ten, once each has a column to itself.
 export class SpiderStuck extends Progress {
   constructor(position) {
     const { state } = rules.start(position);
     const downs = s => s.down.reduce((a, b) => a + b, 0), empties = s => s.tab.filter(t => !t.length).length;
     const sets = state.sets, d0 = downs(state), e0 = empties(state);
     super(everyMove, position, { helps: (s, m) => !!m.deal || s.sets > sets || downs(s) < d0 || empties(s) > e0 });
-    if (state.stock.length) this.result = state.tab.reduce((n, t) => n + t.length, 0) < 10 ? 'dead' : 'live';
+    if (state.stock.length) this.result = 'live';
   }
 }
 

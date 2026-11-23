@@ -8,6 +8,7 @@ import { spider } from '../js/games/spider.js';
 import { VARIANTS } from '../js/games/index.js';
 import { READY_DEALS } from '../js/games/ready-deals.js';
 import { hintFor, primeLine, Dealer, deadEnd } from '../js/deals.js';
+import { SpiderSearch, SpiderSure } from '../js/solvers/spider.js';
 
 const S = 0, H = 1, C = 2, D = 3;
 const name = c => 'A23456789TJQK'[rankOf(c) - 1] + 'SHCD'[suitOf(c)];
@@ -223,19 +224,39 @@ test("Spider won't deal a row while a column is empty", () => {
   assert.ok(next.tab.every((t, i) => t.up.length === s.tab[i].up.length + 1));
 });
 
-test('Spider with fewer cards on the table than columns and a row left is out of moves, and the deck says why', () => {
+test('Spider with fewer cards on the table than columns deals its row once each card has a column of its own', () => {
   // Seven runs cleared, the king, queen and jack of the last one on the table, and the rest of it still to be dealt.
   const run = copy => Array.from({ length: 13 }, (_, r) => copy * 52 + r);
   const tab = Array.from({ length: 10 }, () => ({ down: [], up: [] }));
   tab[0].up = [7 * 52 + 12]; tab[1].up = [7 * 52 + 11]; tab[2].up = [7 * 52 + 10];
   const s = { v: 's1', deal: 1, moves: 300, tab, stock: Array.from({ length: 10 }, (_, r) => 7 * 52 + r), sets: [0, 1, 2, 3, 4, 5, 6].map(run) };
-  assert.equal(spider.stock(s), null, 'no row can be dealt');
-  assert.equal(spider.outOfMoves(s), true);
-  assert.equal(spider.deadEnd(s).none, false, 'the cards can still move about');
-  assert.deepEqual(spider.stockNote(s), { text: 'There aren’t enough cards left to fill every column, so this row can’t be dealt.', piles: [] }, 'and lights up nothing');
-  // With ten cards on the table, they can always be spread one to a column, and the row dealt.
-  const ten = { ...s, tab: s.tab.map((t, i) => ({ down: [], up: [i < 3 ? t.up[0] : 6 * 52 + i] })), sets: s.sets.slice(0, 6), stock: s.stock };
-  assert.equal(spider.outOfMoves(ten), false);
+  assert.equal(spider.stockNote(s), null, 'nothing to say');
+  const next = spider.stock(s);
+  assert.ok(next, 'the row is dealt');
+  assert.equal(next.stock.length, 0);
+  assert.deepEqual(next.tab.map(t => t.up.length), [2, 2, 2, 1, 1, 1, 1, 1, 1, 1], 'a card on every column');
+  assert.equal(spider.outOfMoves(s), false, 'and the deck still helps');
+  // The same three cards in one column: they have to be spread out first, and the deck says so.
+  const piled = { ...s, tab: s.tab.map((t, i) => ({ down: [], up: i === 0 ? [7 * 52 + 12, 7 * 52 + 11, 7 * 52 + 10] : [] })) };
+  assert.equal(spider.stock(piled), null, 'not while two cards share a column');
+  assert.deepEqual(spider.stockNote(piled), { text: 'With fewer than ten cards left, give each one a column of its own before dealing a new row.', piles: ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9'] });
+  assert.equal(spider.outOfMoves(piled), false, 'spreading them out still helps');
+  // Ten cards or more, and every column still needs a card first.
+  const ten = { ...s, tab: s.tab.map((t, i) => ({ down: [], up: i === 9 ? [] : i === 0 ? [7 * 52 + 12, 6 * 52 + 1] : [i < 3 ? t.up[0] : 6 * 52 + i] })), sets: s.sets.slice(0, 6) };
+  assert.equal(spider.stock(ten), null);
+  assert.match(spider.stockNote(ten).text, /^Put a card in every empty column/);
+});
+
+test('the Spider solvers deal the last row once each card left has a column of its own, and win from there', () => {
+  const p = { tab: [[7 * 52 + 12], [7 * 52 + 11], [7 * 52 + 10], [], [], [], [], [], [], []], down: Array(10).fill(0),
+    stock: Array.from({ length: 10 }, (_, r) => 7 * 52 + r), sets: 7 };
+  const search = new SpiderSearch(p);
+  while (!search.result) search.step(5000);
+  assert.equal(search.result, 'won');
+  assert.deepEqual(search.path[0], { deal: true }, 'dealing the row first');
+  const piled = { ...p, tab: [[7 * 52 + 12, 7 * 52 + 11, 7 * 52 + 10], [], [], [], [], [], [], [], [], []] };
+  const sure = new SpiderSure(piled);
+  assert.equal(sure.run(200000), 'won', 'spreading the three out first');
 });
 
 for (const [v, n, count] of [['s1', 8, 7], ['s2', 4, 3]]) {

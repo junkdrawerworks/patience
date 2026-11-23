@@ -1470,8 +1470,9 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
 }
 
 // Once no move can help, the game says so after the move, with Undo and New game: in FreeCell with one card going back
-// and forth (deal 3001), in Spider with too few cards on the table to deal the last row, and in Spider where it takes a
-// look at about a thousand tables, a slice at a time, to be sure (deal 68,977). Undo takes the message away.
+// and forth (deal 3001), and in Spider where it takes a look at about a thousand tables, a slice at a time, to be sure
+// (deal 68,977). Undo takes the message away. Spider with too few cards on the table to fill every column isn't stuck:
+// the deck deals its row once each card has a column of its own.
 {
   const c18 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
   const p18 = await c18.newPage();
@@ -1502,10 +1503,19 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p18.evaluate(s => window.patience.load(s), few);
   await ready();
   await p18.click(`.card[data-c="${7 * 52 + 10}"]`, { position: { x: 8, y: 8 } });
-  await told('There are no moves left that help.', 'Spider, three cards and a row left');
+  await ready();
+  await p18.waitForTimeout(400);
+  assert.equal(await p18.isHidden('#toast'), true, 'Spider, three cards and a row left: the deck can still help, so nothing is said');
   await p18.click('.spot[data-pile="stock"]', { force: true });
-  await p18.waitForFunction(() => document.getElementById('toast').textContent.startsWith('There aren’t'));
-  assert.equal(await p18.textContent('#toast'), 'There aren’t enough cards left to fill every column, so this row can’t be dealt.');
+  await p18.waitForFunction(() => document.getElementById('toast').textContent.startsWith('With fewer'));
+  assert.equal(await p18.textContent('#toast'), 'With fewer than ten cards left, give each one a column of its own before dealing a new row.',
+    'with the jack on the queen, the deck asks for the cards to be spread out');
+  await p18.keyboard.press('z');
+  await ready();
+  await p18.click('.spot[data-pile="stock"]', { force: true });
+  await ready();
+  assert.deepEqual(await p18.evaluate(() => [window.patience.state.stock.length, window.patience.state.tab.map(t => t.up.length).join('')]), [0, '2221111111'],
+    'with each card in a column of its own, the deck deals the last row');
 
   const stuck = {"v":"s1","deal":68977,"tab":[{"down":[369,371,114,322,372],"up":[113,315,8,111,318]},{"down":[63,211,264,376],"up":[212,12,108,3,54,105]},{"down":[161,367,156,316,216],"up":[56,165,319,263,210]},{"down":[374,10,219,266],"up":[6,373,366,157,62,268,215,214,109,160,107,106,209,52]},{"down":[321,53,1,116],"up":[272]},{"down":[2,9,0,5],"up":[115,60,370]},{"down":[168,317,269],"up":[164]},{"down":[163,4,166,167],"up":[7,265,112,57,208,262,365]},{"down":[220,375,159,61],"up":[58,312,64,323,270]},{"down":[11,267,110],"up":[260,158,261,104]}],"stock":[],"sets":[[364,313,314,55,368,213,162,59,320,217,218,271,324]],"moves":106};
   await p18.evaluate(s => window.patience.load(s), stuck);
