@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    // Look in the menu set to Light or Dark, before anything is drawn, so the page doesn't open in the phone's look first.
+    try { const look = JSON.parse(localStorage.getItem('patience.v1')).settings.look; if (look === 'light' || look === 'dark') document.documentElement.dataset.theme = look; } catch { /* none saved */ }
+  </script>
   <script src="carry.js"></script>
   <title>Patience</title>
   <meta name="description" content="Klondike, FreeCell and Spider solitaire with no ads and no account. Tap or drag, undo as much as you like, and only get deals that can be won. Works offline.">
@@ -99,6 +103,14 @@
       <label class="toggle"><input type="checkbox" id="o-clock"><span><b>Show time and moves</b></span></label>
       <label class="toggle"><input type="checkbox" id="o-four" aria-labelledby="o-four-name" aria-describedby="o-four-says"><span><b id="o-four-name">Four-colour suits</b> <span id="o-four-says">Clubs green and diamonds blue, so all four suits look different.</span></span></label>
       <label class="toggle"><input type="checkbox" id="o-left" aria-labelledby="o-left-name" aria-describedby="o-left-says"><span><b id="o-left-name">Deck on the left</b> <span id="o-left-says">In Klondike and Spider the deck sits on the right, under your thumb, unless you'd rather have it here.</span></span></label>
+      <fieldset class="look" aria-describedby="look-says">
+        <legend><b>Look</b> <span id="look-says">Light or dark, or whatever your phone is set to.</span></legend>
+        <div class="seg">
+          <label><input type="radio" name="look" value="phone"><span>Phone setting</span></label>
+          <label><input type="radio" name="look" value="light"><span>Light</span></label>
+          <label><input type="radio" name="look" value="dark"><span>Dark</span></label>
+        </div>
+      </fieldset>
 
       <h3>How to play</h3>
       <div class="howto">

@@ -22,16 +22,8 @@ const js = `document.documentElement.dataset.single = '';\n${result.outputFiles[
 // and the links that only make sense for the hosted site (manifest, home-screen icon, preloads) come out.
 const dataUri = async (path, type) => `data:${type};base64,${(await readFile(new URL(path, root))).toString('base64')}`;
 let css = await read('css/app.css');
-// Pages shown inside a host that has its own light/dark switch get data-theme on <html>:
-// follow the system setting unless it says light, and go dark when it says dark.
-for (const sel of [':root', ':root[data-four]']) {
-  const esc = sel.replace(/[[\]]/g, '\\$&');
-  const block = css.match(new RegExp(`@media \\(prefers-color-scheme: dark\\) \\{\\n  ${esc} \\{([^}]*)\\}\\n\\}`));
-  if (!block) throw new Error(`css/app.css: dark block for ${sel} not found`);
-  const guarded = sel === ':root' ? ':root:not([data-theme="light"])' : ':root[data-four]:not([data-theme="light"])';
-  const forced = sel === ':root' ? ':root[data-theme="dark"]' : ':root[data-four][data-theme="dark"]';
-  css = css.replace(block[0], `@media (prefers-color-scheme: dark) {\n  ${guarded} {${block[1]}}\n}\n${forced} {${block[1]}}`);
-}
+// Pages shown inside a host that has its own light/dark switch get data-theme on <html>, which the stylesheet follows as
+// it follows Look in the menu: light or dark, whatever the system says.
 for (const [, file] of css.matchAll(/url\(\.\.\/(fonts\/[^)]+\.woff2)\)/g)) css = css.replace(`url(../${file})`, `url(${await dataUri(file, 'font/woff2')})`);
 // The fonts' licence asks for it to go wherever they go, and here they go inside the page.
 const ofl = (await read('fonts/OFL.txt')).trim();

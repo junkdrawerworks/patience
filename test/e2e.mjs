@@ -608,10 +608,10 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p4.waitForFunction(() => window.patience.state.moves === 0, null, { timeout: 5000 });
   assert.equal(await p4.isDisabled('#b-undo'), true, 'Undo stops at the damage');
   // Settings and a record the page never writes come back as it would write them.
-  await p4.evaluate(v => sessionStorage.setItem('seed', v), '{"settings":{"auto":"no","left":"x","clock":0},"stats":{"k1":{"played":2.5,"won":-3,"streak":1,"fastest":-1}}}');
+  await p4.evaluate(v => sessionStorage.setItem('seed', v), '{"settings":{"auto":"no","left":"x","clock":0,"look":"blue"},"stats":{"k1":{"played":2.5,"won":-3,"streak":1,"fastest":-1}}}');
   await p4.reload();
   await p4.waitForFunction(() => window.patience?.state, null, { timeout: 20000 });
-  assert.deepEqual(await p4.evaluate(() => [window.patience.settings.auto, window.patience.settings.left, window.patience.settings.clock]), [true, false, true]);
+  assert.deepEqual(await p4.evaluate(() => [window.patience.settings.auto, window.patience.settings.left, window.patience.settings.clock, window.patience.settings.look]), [true, false, true, 'phone']);
   assert.deepEqual(await p4.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 1, best: 0, fastest: 0 });
   assert.deepEqual(errors, [], 'errors starting from a damaged save');
   await c4.close();
@@ -2229,6 +2229,35 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     await pn.keyboard.press('Escape');
   }
   await cn.close();
+}
+
+// Look in the menu: Dark makes it dark on a phone set to light, from the moment it opens next time, and the phone's own
+// bar goes dark too; Light keeps it light on a phone set to dark; Phone setting follows the phone again.
+{
+  const cl = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block', colorScheme: 'light' });
+  const pl = await cl.newPage();
+  const ready = () => pl.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pl.goto(base);
+  await ready();
+  const look = () => pl.evaluate(() => [getComputedStyle(document.documentElement).getPropertyValue('--felt').trim(), [...document.querySelectorAll('meta[name="theme-color"]')].find(m => matchMedia(m.media).matches).content]);
+  const choose = async name => { await pl.click('#b-menu'); await pl.click(`.seg label:has-text("${name}")`); await pl.click('#sheet-menu .close'); };
+  assert.deepEqual(await look(), ['#2a6b4e', '#1f5a42'], 'light, as the phone is');
+  await choose('Dark');
+  assert.deepEqual(await look(), ['#18402f', '#0f2a20'], 'Dark on a phone set to light');
+  assert.equal(await pl.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).settings.look), 'dark');
+  // Dark already as the page starts, before the game is set up.
+  await pl.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.earlyFelt = getComputedStyle(document.documentElement).getPropertyValue('--felt').trim(); }));
+  await pl.reload();
+  await ready();
+  assert.equal(await pl.evaluate(() => window.earlyFelt), '#18402f', 'dark from the start');
+  assert.equal(await pl.isChecked('input[name="look"][value="dark"]'), true);
+  await choose('Phone setting');
+  assert.deepEqual(await look(), ['#2a6b4e', '#1f5a42'], 'back to the phone, light');
+  await pl.emulateMedia({ colorScheme: 'dark' });
+  assert.deepEqual(await look(), ['#18402f', '#0f2a20'], 'the phone set to dark');
+  await choose('Light');
+  assert.deepEqual(await look(), ['#2a6b4e', '#1f5a42'], 'Light on a phone set to dark');
+  await cl.close();
 }
 
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.

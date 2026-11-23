@@ -42,8 +42,11 @@
   color-scheme: light;
 }
 
+/* Dark, when the phone is set to dark, unless Look in the menu says Light (data-theme on <html>, set by app.js, and by
+   a page this one is shown inside that has its own light/dark switch); or when Look says Dark. (:where() keeps these
+   rules as easy to override as :root alone, as the ones further down for more contrast need.) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:where(:not([data-theme='light'])) {
     --felt: #18402f;
     --felt-edge: #0f2a20;
     --on-felt: #e9e4d6;
@@ -67,13 +70,37 @@
     color-scheme: dark;
   }
 }
+:root:where([data-theme='dark']) {
+  --felt: #18402f;
+  --felt-edge: #0f2a20;
+  --on-felt: #e9e4d6;
+  --on-felt-muted: rgba(233, 228, 214, 0.66);
+  --slot: rgba(255, 255, 255, 0.24);
+  --bar: rgba(0, 0, 0, 0.26);
+  --card: #e9e4d7;
+  --card-edge: rgba(0, 0, 0, 0.4);
+  --red: #b5342e; /* 4.7:1 on the card, for the small corner index */
+  --black: #1a1d20;
+  --back: #7f2925;
+  --back-line: rgba(255, 230, 200, 0.16);
+  --back-rim: #d9cfbd;
+  --glow: #f2c14e;
+  --panel: #1d2421;
+  --ink: #ebe6d9;
+  --muted: #a7a395;
+  --line: rgba(235, 230, 217, 0.14);
+  --accent: #6fbf95;
+  --accent-ink: #0f2a20;
+  color-scheme: dark;
+}
 
 /* Clubs a sea green that red-green colour-blind eyes still tell from hearts, and small text can be read in on the card
    (at least 4.5:1); test/e2e.mjs checks both. */
 :root[data-four] { --club: #447b71; --diamond: #2559bd; }
 @media (prefers-color-scheme: dark) {
-  :root[data-four] { --club: #3c6c63; --diamond: #2f5fb8; }
+  :root[data-four]:where(:not([data-theme='light'])) { --club: #3c6c63; --diamond: #2f5fb8; }
 }
+:root[data-four]:where([data-theme='dark']) { --club: #3c6c63; --diamond: #2f5fb8; }
 
 /* Asked for more contrast: the empty places and the deck's turn-over arrow stand out from the felt by 3:1 or more
    (WCAG 2.1, 1.4.11, for the parts of a picture needed to use it), and the line at the top is at full strength. */
@@ -82,7 +109,10 @@
   .spot[data-kind='stock'], .spot[data-kind='deals'] { color: var(--on-felt); }
 }
 @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-  :root { --slot: rgba(255, 255, 255, 0.4); }
+  :root:where(:not([data-theme='light'])) { --slot: rgba(255, 255, 255, 0.4); }
+}
+@media (prefers-contrast: more) {
+  :root:where([data-theme='dark']) { --slot: rgba(255, 255, 255, 0.4); }
 }
 
 * { box-sizing: border-box; }
@@ -633,6 +663,30 @@ button { font: inherit; color: inherit; }
 .toggle input:checked::after { transform: translateX(18px); }
 .toggle input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* Look: three choices side by side, the one chosen outlined as a game being played is in the New game sheet. */
+.look { margin: 0; padding: 9px 0; border: 0; min-width: 0; }
+.look legend { padding: 0; font-size: 14.5px; line-height: 1.4; color: var(--muted); }
+.look legend b { display: block; color: var(--ink); font-weight: 600; font-size: 15.5px; }
+.seg { display: flex; gap: 8px; margin-top: 9px; }
+.seg label { flex: 1 1 0; position: relative; }
+.seg input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.seg span {
+  display: block;
+  padding: 10px 6px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.seg input:checked + span { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) {
+  .seg label:hover span { border-color: var(--accent); }
+}
+
 .howto details { border-top: 1px solid var(--line); }
 .howto details:last-of-type { border-bottom: 1px solid var(--line); }
 .howto summary { padding: 10px 0; font-weight: 650; font-size: 15.5px; cursor: pointer; }
@@ -696,7 +750,7 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
   .card.target .face, .spot.target { outline: 2px dashed Highlight; outline-offset: 1px; }
   .toast, .panel, .stats div { border: 1px solid CanvasText; }
   .stats div.new { outline: 2px solid Highlight; outline-offset: -3px; }
-  .choice.current { border-color: Highlight; outline: 1px solid Highlight; }
+  .choice.current, .seg input:checked + span { border-color: Highlight; outline: 1px solid Highlight; }
   /* The switches are drawn with backgrounds too. */
   .toggle input { forced-color-adjust: none; background: Canvas; box-shadow: inset 0 0 0 1.5px CanvasText; }
   .toggle input::after { background: CanvasText; box-shadow: none; }

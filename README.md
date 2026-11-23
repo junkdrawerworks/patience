@@ -29,7 +29,7 @@
 - **Cards go up by themselves** in Klondike and FreeCell once nothing on the table could still need them, and when the rest is in order the game finishes itself. Drawing one, that's as soon as every card in the columns is face up, turning cards from the deck as it goes. You can switch the first part off.
 - **The bouncing cards** when you win, as tradition requires.
 - **Your record** for each of the six ways of playing: games played, won, win rate, streak, best streak and fastest win.
-- **Settings:** only deal games that can be won, send cards up by themselves, show the time and moves, four-colour suits (clubs green, diamonds blue), and the deck on the left instead of under your right thumb.
+- **Settings:** only deal games that can be won, send cards up by themselves, show the time and moves, four-colour suits (clubs green, diamonds blue), the deck on the left instead of under your right thumb, and the look: light or dark, or whatever your phone is set to.
 - **On a keyboard,** Space uses the deck in Klondike and Spider, Z undoes, H gives a hint, Enter plays it and N opens New game (Enter there deals another of the same).
 - No ads, no account and no server. Your game, your record and your settings stay in your browser. It works offline and installs to a phone's home screen.
 

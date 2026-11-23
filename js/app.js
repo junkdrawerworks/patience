@@ -11,7 +11,8 @@ import { moveWords, aftermath, upWords, hintWords } from './words.js';
 
 const KEY = 'patience.v1';
 const $ = id => document.getElementById(id);
-const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four: false, left: false };
+const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four: false, left: false, look: 'phone' };
+const LOOKS = ['phone', 'light', 'dark']; // Look in the menu: whatever the phone is set to, or light or dark whatever it says
 const blank = () => ({ played: 0, won: 0, streak: 0, best: 0, fastest: 0 });
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const shapes = {}; // a new deal of each way of playing, for the shape of a saved game (see sound())
@@ -20,6 +21,7 @@ const upgrade = s => (s && !s.v && s.draw ? { ...s, v: 'k' + s.draw } : s);
 const settingsOf = saved => {
   const s = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) => [k, typeof saved?.[k] === typeof d ? saved[k] : d]));
   if (!Object.keys(VARIANTS).includes(s.variant)) s.variant = 'k1';
+  if (!LOOKS.includes(s.look)) s.look = 'phone';
   return s;
 };
 // Counts are whole numbers, and the fastest win a time; none of them below nothing.
@@ -593,8 +595,28 @@ for (const [k, id] of Object.entries(toggles)) {
   });
 }
 
+document.querySelectorAll('input[name="look"]').forEach(r => r.addEventListener('change', () => {
+  settings.look = r.value;
+  apply();
+  write();
+}));
+
+// Look set to Light or Dark puts data-theme on the page, which the stylesheet follows, and colours the phone's own bar to
+// match. Set to the phone's setting, it leaves data-theme as it found it (a page this one is shown inside may set it).
+const hostTheme = settings.look === 'phone' ? document.documentElement.dataset.theme : undefined;
+const barColours = [...document.querySelectorAll('meta[name="theme-color"]')].map(m => [m, m.content]);
+function applyLook() {
+  const root = document.documentElement, forced = settings.look !== 'phone';
+  if (forced) root.dataset.theme = settings.look;
+  else if (hostTheme) root.dataset.theme = hostTheme;
+  else delete root.dataset.theme;
+  for (const [m, own] of barColours) m.content = forced ? (settings.look === 'dark' ? '#0f2a20' : '#1f5a42') : own;
+  document.querySelectorAll('input[name="look"]').forEach(r => { r.checked = r.value === settings.look; });
+}
+
 function apply() {
   for (const [k, id] of Object.entries(toggles)) $(id).checked = settings[k];
+  applyLook();
   document.documentElement.toggleAttribute('data-four', settings.four);
   $('clock').hidden = !settings.clock;
   if (table.left !== settings.left) {
