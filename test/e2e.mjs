@@ -264,10 +264,12 @@ assert.equal(await page.locator('.card.down').count(), 0, 'all face up');
 await page.evaluate(() => window.patience.newGame('fc', 617));
 await page.waitForTimeout(2000);
 await settled();
-// A jack, queen or king with a card on it doesn't show the edge of its frame under that card (617 has six).
+// A jack, queen or king with a card on it doesn't show the edge of its frame under that card (617 has six): it's under
+// the card, or not drawn at all.
 const peeks = await page.evaluate(() => window.patience.state.tab.flatMap(t => t.slice(0, -1).flatMap((c, i) => {
   if (c % 13 < 10) return [];
-  const frame = document.querySelector(`.card[data-c="${c}"] .court`).getBoundingClientRect();
+  const court = document.querySelector(`.card[data-c="${c}"] .court`), frame = court.getBoundingClientRect();
+  if (getComputedStyle(court).visibility === 'hidden') return [-1];
   return [document.querySelector(`.card[data-c="${t[i + 1]}"]`).getBoundingClientRect().top - frame.top];
 })));
 assert.equal(peeks.length, 6);
@@ -2010,6 +2012,41 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   });
   assert.ok(long.fit && long.cw < after, `the longest column fits, the cards ${long.cw} px`);
   await cz.close();
+}
+
+// Face-up cards in the columns spread out as far as half a card while there's room below, every column alike so they
+// line up, and closer once the longest column needs it, still fitting. Once closer, they don't spread out again for the
+// rest of the deal. A covered card shows its corner and none of its middle. Two-suit Spider deal 5 on a 390 by 844 phone.
+{
+  const cg = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pg = await cg.newPage();
+  await pg.goto(base);
+  await pg.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  // Columns 0 and 1 with `ups` face-up cards each (column 1 with five face down too), the rest with one each.
+  const spread = (ups, moves) => pg.evaluate(async ([ups, moves]) => {
+    const { VARIANTS } = await import('./js/games/index.js');
+    const s = VARIANTS.s2.game.deal(5, 's2'), all = [...s.stock];
+    s.tab.forEach(t => all.push(...t.down, ...t.up));
+    const tab = Array.from({ length: 10 }, (_, i) => ({ down: i === 1 ? all.splice(0, 5) : [], up: all.splice(0, i < 2 ? ups[i] : 1) }));
+    window.patience.load({ ...s, stock: all.splice(0, 10), tab, moves }, 0);
+    await new Promise(r => setTimeout(r, 400));
+    const table = document.getElementById('table'), ch = parseFloat(table.style.getPropertyValue('--ch'));
+    const tops = i => tab[i].up.map(c => document.getElementById('card-' + c).getBoundingClientRect().top);
+    const gap = i => { const t = tops(i); return (t[1] - t[0]) / ch; };
+    const last = c => document.getElementById('card-' + c);
+    const middle = c => getComputedStyle(last(c).querySelector('.pip, .court')).visibility;
+    return { gaps: [gap(0), gap(1)], fits: last(tab[1].up.at(-1)).getBoundingClientRect().bottom <= table.getBoundingClientRect().bottom + 0.5,
+      covered: middle(tab[0].up[0]), top: middle(tab[0].up.at(-1)) };
+  }, [ups, moves]);
+  const short = await spread([3, 6], 0);
+  assert.ok(short.gaps.every(g => Math.abs(g - 0.5) < 0.03), `short columns, half a card apart: ${short.gaps.map(g => g.toFixed(2))}`);
+  assert.deepEqual([short.covered, short.top], ['hidden', 'visible'], 'a covered card shows none of its middle; the top card shows it');
+  const long = await spread([3, 40], 10);
+  assert.ok(Math.abs(long.gaps[0] - long.gaps[1]) < 0.03, `the columns line up: ${long.gaps.map(g => g.toFixed(2))}`);
+  assert.ok(long.gaps[0] > 0.37 && long.gaps[0] < 0.48 && long.fits, `a long column brings them closer, ${long.gaps[0].toFixed(2)} of a card, and fits`);
+  const after = await spread([3, 6], 11);
+  assert.ok(Math.abs(after.gaps[0] - long.gaps[0]) < 0.03, `played down again in the same deal, they stay ${long.gaps[0].toFixed(2)} apart, not ${after.gaps[0].toFixed(2)}`);
+  await cg.close();
 }
 
 // Held sideways, the columns reach down to where a message sits, so it goes where it covers no card: two-suit Spider

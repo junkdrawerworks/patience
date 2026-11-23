@@ -148,6 +148,7 @@ export class Table {
     const m = this.m, game = gameOf(s), at = new Map();
     // Cards deep in a pile can't be seen, so they're hidden: drawn, their edges would add up to a dark outline.
     const deep = (i, n, showing) => i < n - showing;
+    const room = m.H - m.pad - m.tabY - m.ch, spread = this.spreadFor(s, room);
     m.piles.forEach((id, pi) => {
       const kind = m.kind[id], { down, up } = game.pile(s, id), x0 = m.spot[id], dir = m.dir[id];
       const z0 = kind === 'column' ? 2000 + pi * 100 : 200 * (pi + 1);
@@ -181,9 +182,8 @@ export class Table {
         up.forEach((c, i) => put(c, x0 + dir * ((i / 13) | 0) * step, m.top, z0 + i, true, i, !this.showAll && i % 13 < 11));
       } else {
         // Columns fan downwards, and squeeze up when they would run off the bottom.
-        const room = m.H - m.pad - m.tabY - m.ch;
         const nd = down.length, nu = up.length;
-        let dStep = m.ch * 0.13, uStep = m.ch * 0.36;
+        let dStep = m.ch * 0.13, uStep = m.ch * spread;
         const need = () => nd * dStep + Math.max(0, nu - 1) * uStep;
         // No closer than STEP_DOWN and m.step, which still shows a face-up card's rank in full; the cards are sized so
         // that the longest column fits that way (see rowsFor()).
@@ -193,10 +193,30 @@ export class Table {
         if (need() > room && nu > 1) uStep = Math.max(m.ch * 0.2, (room - nd * dStep) / (nu - 1));
         let y = m.tabY;
         down.forEach((c, i) => { put(c, x0, y, z0 + i, false, -1, false); y += dStep; });
-        up.forEach((c, i) => { put(c, x0, y, z0 + nd + i, true, i, false); y += uStep; });
+        up.forEach((c, i) => { put(c, x0, y, z0 + nd + i, true, i, false); if (i < nu - 1) at.get(c).covered = true; y += uStep; });
       }
     });
     return at;
+  }
+
+  // How far apart face-up cards in the columns go, in card heights: as far as half a card while there's room below, and
+  // 0.36 once the longest column needs that (place() squeezes a column closer still if it must). One spacing for every
+  // column, so they line up, set by the column that needs the most room. Like the card size (see layout()), it doesn't
+  // spread out again as a column gets shorter, for the rest of the deal at this size of table, so the cards don't shift
+  // back and forth as one column is played down and built up.
+  spreadFor(s, room) {
+    const m = this.m, g = gameOf(s), of = dealOf(s);
+    let u = 0.5;
+    for (const id of m.piles) {
+      if (m.kind[id] !== 'column') continue;
+      const { down, up } = g.pile(s, id);
+      if (up.length > 1) u = Math.min(u, (room - down.length * m.ch * 0.13) / ((up.length - 1) * m.ch));
+    }
+    u = Math.max(0.36, u);
+    const size = `${m.W}x${m.H}:${m.ch}`;
+    if (of && this.spread?.of === of && this.spread.size === size) u = Math.min(u, this.spread.u);
+    this.spread = { of, size, u };
+    return u;
   }
 
   // Draw the state. still: jump there with no movement. deal: deal the columns out one by one.
@@ -275,6 +295,7 @@ export class Table {
       const was = el.style.transform.match(/-?[\d.]+/g) || [p.x, p.y];
       el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
       el.classList.toggle('down', !p.up);
+      el.classList.toggle('covered', !!p.covered);
       el.setAttribute('aria-label', p.up ? cardName(c) : 'face down');
       const flight = this.flights.get(c);
       if (holding?.has(c)) {

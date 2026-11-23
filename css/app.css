@@ -382,6 +382,11 @@ button { font: inherit; color: inherit; }
   font-variation-settings: 'opsz' 72;
 }
 .court svg { width: calc(var(--cw) * 0.18); height: calc(var(--cw) * 0.18); margin-top: 6%; }
+/* A card with another on top of it in a column shows its corner and nothing of its middle, which the cards being spread
+   out (table.js, spreadFor()) would otherwise cut through. It goes once the card coming onto it has had time to land. */
+.pip, .court { transition: visibility 0s; }
+.card.covered .pip, .card.covered .court { visibility: hidden; transition-delay: 0.25s; }
+.table.still .pip, .table.still .court { transition: none; }
 .face svg { fill: currentColor; display: block; }
 
 .card.hint .face { box-shadow: 0 0 0 2px var(--glow), 0 0 14px 3px color-mix(in srgb, var(--glow) 65%, transparent); }
