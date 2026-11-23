@@ -49,6 +49,8 @@ let slow = 0;         // the timer that says a deal is still being shuffled
 let landed = 0;       // the timer that frees the table once a deal has landed
 let thinking = false; // the Hint button is searching
 let pressed = false;  // Hint was pressed again while it was searching
+let slowHint = 0;     // the timer that says Hint is still thinking
+const THINKING = 'Thinking…';
 let stopBounce = null;
 
 const G = () => gameOf(game);
@@ -222,12 +224,16 @@ async function hint() {
   thinking = true;
   pressed = false;
   $('b-hint').classList.add('busy');
+  clearTimeout(slowHint);
+  slowHint = setTimeout(() => { if (game === at && !table.locked) $('status').textContent = THINKING; }, 700);
   let h;
   try {
     h = await hintFor(game, { auto: settings.auto });
   } finally {
     thinking = false;
     $('b-hint').classList.remove('busy');
+    clearTimeout(slowHint);
+    if ($('status').textContent === THINKING) showInfo();
   }
   if (game !== at) { // they moved on while it was thinking: a press since then is for the table as it is now
     if (pressed) hint();

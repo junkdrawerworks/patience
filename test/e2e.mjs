@@ -794,6 +794,30 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cd.close();
 }
 
+// When Hint takes more than a moment, the line at the top says it's thinking, and goes back once it has answered.
+// Four-suit Spider deal 35 takes the solver about 100,000 positions; the processor is slowed to a phone's here.
+{
+  const ck = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const pk = await ck.newPage();
+  const errors = [];
+  pk.on('pageerror', e => errors.push(e.message));
+  const ready = () => pk.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pk.goto(base);
+  await ready();
+  await pk.evaluate(() => window.patience.newGame('s4', 35));
+  await pk.waitForTimeout(2000);
+  await ready();
+  const cdp = await ck.newCDPSession(pk);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  await pk.click('#b-hint');
+  await pk.waitForFunction(() => document.getElementById('status').textContent === 'Thinking…', null, { timeout: 5000 });
+  await pk.waitForSelector('.hint', { timeout: 60000 });
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  assert.equal(await pk.textContent('#status'), 'Spider, four suits · Deal 35', 'back to the game and deal once Hint answered');
+  assert.deepEqual(errors, [], 'errors while Hint thought');
+  await ck.close();
+}
+
 // Swipes near the screen's sides. On Android with gesture navigation a swipe that starts near either side is the
 // phone's Back, and Chrome has its own swipe to go Back or Forward. A swipe sideways is nobody's, so it can't run on
 // into Chrome's: the page doesn't overscroll, and the table takes every touch.
