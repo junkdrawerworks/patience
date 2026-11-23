@@ -227,6 +227,11 @@ button { font: inherit; color: inherit; }
 @media (max-width: 520px) {
   .name { display: none; }
 }
+/* On a narrow phone, a little smaller, so the deal's number still fits beside the clock an hour and a thousand moves into
+   a game. */
+@media (max-width: 380px) {
+  .status, .clock { font-size: 12px; }
+}
 
 @media (orientation: landscape) and (max-height: 520px) {
   .game { grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; }

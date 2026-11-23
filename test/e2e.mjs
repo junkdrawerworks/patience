@@ -2020,6 +2020,24 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cq.close();
 }
 
+// The move count has its thousands comma, as the deal number has, and on a 360 px phone the deal's name is whole beside
+// the clock an hour and a thousand moves into a game: drawing three, deal 999,999, at 1:02:03 with 1,234 moves.
+{
+  const ct = await browser.newContext({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pt = await ct.newPage();
+  await pt.goto(base);
+  await pt.evaluate(() => document.fonts.ready);
+  await pt.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pt.evaluate(async () => {
+    const { VARIANTS } = await import('./js/games/index.js');
+    window.patience.load({ ...VARIANTS.k3.game.deal(999999, 'k3'), moves: 1234 }, 3723000);
+  });
+  const top = await pt.evaluate(() => { const s = document.getElementById('status'); return { clock: document.getElementById('clock').textContent, cut: s.scrollWidth > s.clientWidth, status: s.textContent }; });
+  assert.equal(top.clock, '1:02:03 · 1,234 moves');
+  assert.equal(top.cut, false, `the top line is cut short: ${top.status}`);
+  await ct.close();
+}
+
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.
 {
   const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
