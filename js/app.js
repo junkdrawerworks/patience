@@ -34,6 +34,8 @@ let lastWritten = stored(); // the save as this page last read or wrote it, to t
 const saved = read(lastWritten);
 const settings = settingsOf(saved.settings);
 const stats = Object.fromEntries(Object.keys(VARIANTS).map(v => [v, record(saved.stats?.[v])]));
+// The games this phone has said its first word on (see firstWord()): 'klondike', 'freecell', 'spider'.
+const introduced = new Set(Array.isArray(saved.introduced) ? saved.introduced.filter(g => typeof g === 'string') : []);
 
 let game = null;      // where the cards are now
 let history = [];     // where they were before each move, for Undo
@@ -309,7 +311,24 @@ function start(state, again) {
   table.render(game, { deal: true });
   showInfo();
   write();
-  landed = setTimeout(() => { table.locked = false; after(); }, table.dealDuration && table.dealDuration + 150);
+  landed = setTimeout(() => { table.locked = false; after(); if (!again) firstWord(); }, table.dealDuration && table.dealDuration + 150);
+}
+
+// The first time each game is dealt on a phone to someone who hasn't played it here, a word on how it plays, with a
+// button to its rules in the menu. Said once a game, and remembered.
+const FIRST_WORDS = {
+  klondike: 'Tap a card to send it where it fits, or drag it. Red on black, down to the ace.',
+  freecell: 'Park a card in a free cell, top left. Any card can go in an empty column.',
+  spider: 'Tap the deck to deal a row. Runs of one suit, king to ace, clear away.',
+};
+const phone = matchMedia('(pointer: coarse)');
+function firstWord() {
+  const name = VARIANTS[game.v].name, key = name.toLowerCase();
+  if (introduced.has(key) || !phone.matches || game.moves || over() || !$('toast').hidden || sheetOpen()) return;
+  if (Object.keys(VARIANTS).some(v => VARIANTS[v].name === name && stats[v].played)) return;
+  introduced.add(key);
+  write();
+  toast(FIRST_WORDS[key], [['How to play', () => openMenu(true)]], 0);
 }
 
 // Hint's search, or Take me back's, for table `at`, with the Hint button pulsing and, after a moment, Thinking… where the
@@ -548,6 +567,7 @@ function read(text) {
   try { s = JSON.parse(text); } catch { /* none, or not readable */ }
   if (!isObj(s)) return {};
   for (const k of ['settings', 'stats', 'next', 'game']) if (!isObj(s[k]) && !(k === 'game' && s[k] === null)) delete s[k];
+  if (!Array.isArray(s.introduced)) delete s.introduced;
   // The first version only played Klondike, and kept the draw count where the way of playing now goes.
   if (s.settings && !s.settings.variant && s.settings.draw) s.settings.variant = 'k' + s.settings.draw;
   if (s.stats?.[1] || s.stats?.[3]) { s.stats.k1 ??= s.stats[1]; s.stats.k3 ??= s.stats[3]; }
@@ -561,7 +581,7 @@ function write() {
     // The whole undo list goes too, so Undo still goes all the way back after the page is closed. The last 2,000 moves
     // is more than a game takes, and keeps the save to about a megabyte even in Spider. A game won is left out.
     const g = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
-    const save = { settings, stats, next: dealer?.kept(), game: g };
+    const save = { settings, stats, next: dealer?.kept(), game: g, introduced: [...introduced] };
     let text = JSON.stringify(save);
     try {
       localStorage.setItem(KEY, text);
@@ -600,6 +620,7 @@ function adopt() {
   const s = read(text);
   for (const v of Object.keys(VARIANTS)) Object.assign(stats[v], record(s.stats?.[v]));
   Object.assign(settings, settingsOf(s.settings));
+  for (const g of s.introduced ?? []) if (typeof g === 'string') introduced.add(g);
   apply();
   dealer.load(s.next);
   if (!$('sheet-menu').hidden) showStats($('stats-for').value);
@@ -674,12 +695,19 @@ function apply() {
 $('b-new').addEventListener('click', openNew);
 $('b-undo').addEventListener('click', undo);
 $('b-hint').addEventListener('click', () => hint());
-$('b-menu').addEventListener('click', () => {
+$('b-menu').addEventListener('click', () => openMenu());
+$('b-howto').addEventListener('click', () => openMenu(true));
+// The menu, with the rules of the game being played open under How to play; `howto`: opened at them.
+function openMenu(howto) {
   showStats(game?.v || settings.variant);
   const name = VARIANTS[game?.v || settings.variant].name;
   document.querySelectorAll('.howto details').forEach(d => { d.open = d.dataset.game === name.toLowerCase(); });
   openSheet('sheet-menu');
-});
+  if (!howto) return;
+  const rules = document.querySelector('.howto details[open]');
+  $('howto-title').scrollIntoView({ block: 'start' });
+  rules.querySelector('summary').focus({ preventScroll: true });
+}
 $('b-restart').addEventListener('click', restart);
 $('stats-for').addEventListener('change', e => showStats(e.target.value));
 document.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => newGame(b.dataset.v)));

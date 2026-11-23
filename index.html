@@ -50,7 +50,10 @@
   <div class="sheet" id="sheet-new" hidden>
     <div class="scrim" data-close></div>
     <section class="panel" role="dialog" aria-modal="true" aria-labelledby="new-title">
-      <h2 id="new-title">New game</h2>
+      <div class="panel-head new-head">
+        <h2 id="new-title">New game</h2>
+        <button type="button" class="small-plain" id="b-howto">How to play</button>
+      </div>
       <p class="note" id="new-note" hidden>A new deal counts the game you're in as a loss. Starting this deal again doesn't.</p>
       <div class="games">
         <div class="pick">
@@ -112,7 +115,7 @@
         </div>
       </fieldset>
 
-      <h3>How to play</h3>
+      <h3 id="howto-title">How to play</h3>
       <div class="howto">
         <details data-game="klondike">
           <summary>Klondike</summary>

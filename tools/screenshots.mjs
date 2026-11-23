@@ -50,7 +50,7 @@ async function open(viewport, deviceScaleFactor, scheme = 'light') {
     window.reseed(seed);
     // With "Only deal games that can be won" off, no deal is being found in the background (every deal here is chosen),
     // so nothing else takes numbers from Math.random while the cards bounce.
-    localStorage.setItem('patience.v1', JSON.stringify({ settings: { winnable: false }, stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 300000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } } }));
+    localStorage.setItem('patience.v1', JSON.stringify({ settings: { winnable: false }, stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 300000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } }, introduced: ['klondike', 'freecell', 'spider'] }));
   }, SEED);
   await page.goto(base);
   await page.evaluate(() => document.fonts.ready);

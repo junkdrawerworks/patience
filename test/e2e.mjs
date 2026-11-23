@@ -23,6 +23,20 @@ const server = createServer(async (req, res) => {
 const base = `http://localhost:${server.address().port}/`;
 
 const browser = await pw.chromium.launch();
+// On a touch screen the first deal of each game says a first word on how it plays, which would sit over what the other
+// tests look at. Every context starts with it said already, but those made with { firstWords: true }, which test it.
+{
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async ({ firstWords, ...options } = {}) => {
+    const c = await newContext(options);
+    if (!firstWords) {
+      await c.addInitScript(() => {
+        try { localStorage.getItem('patience.v1') ?? localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider'] })); } catch { /* blocked */ }
+      });
+    }
+    return c;
+  };
+}
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
 const page = await ctx.newPage();
 const problems = [];
@@ -1834,6 +1848,74 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.deepEqual([s.tab[5].up, s.tab[6].up, s.moves], [[QH], [JC], 7], 'the jack is back where it was, and letting go moved nothing');
   assert.deepEqual(errors, [], 'errors while holding a card');
   await ch.close();
+}
+
+// The first time each game is dealt on a phone, a word on how it plays, with How to play, which opens the menu at that
+// game's rules. Once a game, remembered, and not for someone who has played it here already, nor with a mouse. The New
+// game sheet has a How to play button too.
+{
+  const cf = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block', firstWords: true });
+  const pf = await cf.newPage();
+  const errors = [];
+  pf.on('pageerror', e => errors.push(e.message));
+  const ready = () => pf.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const words = () => pf.textContent('#toast-words');
+  await pf.goto(base);
+  await ready();
+  await pf.waitForSelector('#toast:not([hidden])');
+  assert.equal(await words(), 'Tap a card to send it where it fits, or drag it. Red on black, down to the ace.');
+  assert.deepEqual(await pf.locator('#toast button').allTextContents(), ['How to play']);
+  await pf.waitForTimeout(9500);
+  assert.equal(await pf.isHidden('#toast'), false, 'it stays until something else happens');
+  await pf.click('#toast button');
+  assert.equal(await pf.isHidden('#sheet-menu'), false, 'How to play opens the menu');
+  assert.deepEqual(await pf.evaluate(() => [...document.querySelectorAll('.howto details')].map(d => d.open)), [true, false, false], 'at Klondike’s rules');
+  const shown = await pf.evaluate(() => { const r = document.querySelector('.howto details[open] summary').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; });
+  assert.ok(shown, 'scrolled to them');
+  await pf.keyboard.press('Escape');
+  assert.deepEqual(await pf.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).introduced), ['klondike']);
+
+  // Another Klondike deal says nothing; the first FreeCell deal says FreeCell's, once.
+  await pf.evaluate(() => window.patience.newGame('k3'));
+  await pf.waitForTimeout(1500);
+  await ready();
+  assert.equal(await pf.isHidden('#toast'), true, 'Klondike drawing three is still Klondike');
+  await pf.evaluate(() => window.patience.newGame('fc'));
+  await pf.waitForSelector('#toast:not([hidden])', { timeout: 15000 });
+  assert.equal(await words(), 'Park a card in a free cell, top left. Any card can go in an empty column.');
+  const felt = await pf.locator('#table').boundingBox();
+  await pf.touchscreen.tap(felt.x + felt.width / 2, felt.y + felt.height - 10);
+  assert.equal(await pf.isHidden('#toast'), true, 'a touch on the table puts it away');
+  await pf.reload();
+  await ready();
+  await pf.evaluate(() => window.patience.newGame('fc'));
+  await pf.waitForTimeout(1500);
+  await ready();
+  assert.equal(await pf.isHidden('#toast'), true, 'FreeCell again, after a reload, says nothing');
+  // Spider for someone with Spider in their record already says nothing either.
+  await pf.evaluate(() => { window.patience.stats.s4.played = 3; return window.patience.newGame('s1'); });
+  await pf.waitForTimeout(2500);
+  await ready();
+  assert.equal(await pf.isHidden('#toast'), true, 'Spider, played before, says nothing');
+
+  // The New game sheet's How to play opens the menu at the rules of the game being played.
+  await pf.click('#b-new');
+  await pf.click('#b-howto');
+  assert.equal(await pf.isHidden('#sheet-new'), true);
+  assert.equal(await pf.isHidden('#sheet-menu'), false);
+  assert.deepEqual(await pf.evaluate(() => [...document.querySelectorAll('.howto details')].map(d => d.open)), [false, false, true], 'at Spider’s rules');
+  await pf.keyboard.press('Escape');
+  assert.deepEqual(errors, [], 'errors on a first word');
+  await cf.close();
+
+  // With a mouse, nothing.
+  const cm = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block', firstWords: true });
+  const pm = await cm.newPage();
+  await pm.goto(base);
+  await pm.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pm.waitForTimeout(800);
+  assert.equal(await pm.isHidden('#toast'), true, 'no first word with a mouse');
+  await cm.close();
 }
 
 // A drag the rules turn down for a reason a newcomer mightn't know says why: a card that isn't a king let go on an empty
