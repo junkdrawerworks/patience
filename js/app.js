@@ -221,7 +221,7 @@ function start(state, again) {
   table.render(game, { deal: true });
   showInfo();
   write();
-  landed = setTimeout(() => { table.locked = false; after(); }, table.dealDuration + 150);
+  landed = setTimeout(() => { table.locked = false; after(); }, table.dealDuration && table.dealDuration + 150);
 }
 
 async function hint() {

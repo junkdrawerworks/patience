@@ -22,6 +22,8 @@ export class Table {
     this.flights = new Map(); // card -> its landing, while it's on its way: { timer, z, deep } (see fly())
     this.drag = null;
     this.dealDuration = 0;
+    // With reduced motion asked for, cards go straight to where they're going: no dealing out, no waiting their turn.
+    this.calm = matchMedia('(prefers-reduced-motion: reduce)');
 
     el.addEventListener('pointerdown', e => this.down(e));
     el.addEventListener('pointermove', e => this.moveDrag(e));
@@ -159,6 +161,8 @@ export class Table {
 
   // Draw the state. still: jump there with no movement. deal: deal the columns out one by one.
   render(s, opts = {}) {
+    const calm = this.calm.matches;
+    if (opts.deal && calm) { opts = { still: true }; this.dealDuration = 0; }
     const first = !this.state || this.v !== s.v;
     // A hint stays lit until the cards move: drawing the same table again (a new size, the deck moved) keeps it.
     if (s !== this.state) this.clearHint();
@@ -217,7 +221,7 @@ export class Table {
       if (opts.deal || flyers.has(c) || (old && (old.pile !== p.pile || Math.abs(old.x - p.x) > 1 || Math.abs(old.y - p.y) > 1))) moved.push([c, p, old]);
     }
     // A row dealt in Spider, or a run cleared away, goes one card at a time.
-    if (!opts.deal && !opts.still && !first) {
+    if (!opts.deal && !opts.still && !first && !calm) {
       const row = moved.filter(([, p, old]) => old && m.kind[old.pile] === 'deals' && p.pile !== old.pile);
       const cleared = moved.filter(([, p, old]) => old && m.kind[p.pile] === 'sets' && old.pile !== p.pile);
       if (row.length > 1) delay(row.sort((a, b) => m.order[a[1].pile] - m.order[b[1].pile]).map(([c]) => c), 45);
@@ -237,7 +241,7 @@ export class Table {
         el.style.transform = `translate(${Math.round(p.x + d.dx)}px, ${Math.round(p.y + d.dy)}px)`;
       } else if (movedSet.has(c) && animate) {
         // The further it goes, the longer it takes, so a long trip doesn't look like a jump.
-        const ms = Math.round(Math.min(320, 170 + 0.12 * Math.hypot(p.x - was[0], p.y - was[1])));
+        const ms = calm ? 10 : Math.round(Math.min(320, 170 + 0.12 * Math.hypot(p.x - was[0], p.y - was[1])));
         el.style.setProperty('--travel', `${ms}ms`);
         this.fly(c, p, ms + 40 + (waits.get(c) || 0));
       } else if (flight && animate) {

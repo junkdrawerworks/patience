@@ -1427,6 +1427,52 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cn.close();
 }
 
+// With reduced motion asked for, a deal is on the table at once, rows and cleared runs in Spider don't come a card at
+// a time, and nothing shakes or slides in: a card that can't go shows an outline instead of shaking.
+{
+  const cr = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block', reducedMotion: 'reduce' });
+  const pr = await cr.newPage();
+  const errors = [];
+  pr.on('pageerror', e => errors.push(e.message));
+  const ready = () => pr.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pr.goto(base);
+  await ready();
+  for (const [v, n] of [['fc', 617], ['s1', 3]]) {
+    const took = await pr.evaluate(async ([v, n]) => {
+      const t0 = performance.now();
+      await window.patience.newGame(v, n);
+      await new Promise(res => { const f = () => (window.patience.busy ? requestAnimationFrame(f) : res()); f(); });
+      return performance.now() - t0;
+    }, [v, n]);
+    assert.ok(took < 400, `${v} deal ${n} was ready in ${Math.round(took)} ms`);
+  }
+  // A row dealt in Spider: no card waits for the one before.
+  await pr.click('.spot[data-pile="stock"]', { force: true });
+  assert.equal(await pr.evaluate(() => [...document.querySelectorAll('.card')].filter(el => parseFloat(el.style.transitionDelay) > 0).length), 0, 'no card waits its turn');
+  await ready();
+  // A card that can't go anywhere (the 9 of clubs, with the free cells full and no red 10): an outline, no shake.
+  await pr.evaluate(() => {
+    const card = (suit, rank) => suit * 13 + rank - 1;
+    window.patience.load({ v: 'fc', deal: 617, cells: [card(0, 13), card(1, 13), card(2, 13), card(3, 13)], found: [[], [], [], []], moves: 4,
+      tab: [[card(0, 5), card(2, 9)], [card(0, 7)], [card(0, 9)], [card(0, 11)], [card(2, 5)], [card(2, 7)], [card(2, 3)], [card(2, 11)]] });
+  });
+  await ready();
+  await pr.click('.card[data-c="34"]', { position: { x: 12, y: 10 } });
+  const look = await pr.evaluate(() => {
+    const el = document.querySelector('.card[data-c="34"]');
+    return { shake: el.classList.contains('shake'), anim: getComputedStyle(el.firstChild).animationName, ring: getComputedStyle(el.querySelector('.face')).boxShadow };
+  });
+  assert.equal(look.shake, true, 'the card was refused');
+  assert.equal(look.anim, 'none', 'it doesn\'t shake');
+  assert.match(look.ring, /2px/, 'it shows an outline');
+  // The New game sheet comes up without sliding in.
+  await pr.click('#b-new');
+  assert.deepEqual(await pr.evaluate(() => ['#sheet-new .panel', '#sheet-new .scrim'].map(q => getComputedStyle(document.querySelector(q)).animationName)), ['none', 'none']);
+  await pr.keyboard.press('Escape');
+  assert.deepEqual(errors, [], 'errors with reduced motion');
+  await cr.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
