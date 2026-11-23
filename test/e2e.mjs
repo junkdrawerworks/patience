@@ -1901,8 +1901,34 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await b.setInputFiles('#f-bring', { name: 'later.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...copy, version: 2, from: 'elsewhere' })) });
   await b.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('That record was saved by a newer Patience'));
   assert.equal(await b.evaluate(() => window.patience.stats.k1.played), 35, 'changing nothing');
+  // A copy from the second phone holds the first phone's record: not onto the first phone, nor onto a third that has
+  // the first phone's record already, and a third phone taking it takes both, so the first phone's copy is turned away.
+  const [download2] = await Promise.all([b.waitForEvent('download'), b.click('#b-save')]);
+  const path2 = await download2.path();
+  const copy2 = JSON.parse(await readFile(path2, 'utf8'));
+  assert.deepEqual(copy2.holds, [copy.from], 'the copy says whose record it holds');
+  await a.setInputFiles('#f-bring', path2);
+  await a.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('That record has this phone’s own record in it'));
+  assert.equal(await a.evaluate(() => window.patience.stats.k1.played), 30, 'not onto the phone whose record is in it');
+  const [cc, c3] = await open({ introduced: ['klondike', 'freecell', 'spider'] });
+  await c3.click('#b-menu');
+  await c3.setInputFiles('#f-bring', path);
+  await c3.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('Your record'));
+  await c3.setInputFiles('#f-bring', path2);
+  await c3.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('That record holds one that’s here already'));
+  assert.equal(await c3.evaluate(() => window.patience.stats.k1.played), 30, 'nor onto one with a record it holds');
+  const [cd, d4] = await open({ introduced: ['klondike', 'freecell', 'spider'] });
+  await d4.click('#b-menu');
+  await d4.setInputFiles('#f-bring', path2);
+  await d4.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('Your record'));
+  assert.equal(await d4.evaluate(() => window.patience.stats.k1.played), 35);
+  await d4.setInputFiles('#f-bring', path);
+  await d4.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('A record from that phone'));
+  assert.equal(await d4.evaluate(() => window.patience.stats.k1.played), 35, 'the record it held is not added again');
   await ca.close();
   await cb.close();
+  await cc.close();
+  await cd.close();
 }
 
 // Two tabs on different ways of playing: each follows the other, onto the game it carries on with, and the game it

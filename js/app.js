@@ -735,12 +735,14 @@ window.addEventListener('storage', e => { if (e.key === KEY) adopt(); });
 
 // ---- a copy of the record, to keep or take to another phone ----
 
-// The file: { patience: 'record', version: 1, saved (when, as an ISO date), from (the save it came from), settings,
-// stats (by way of playing, as the save keeps them) }. A later version of Patience still reads version 1.
+// The file: { patience: 'record', version: 1, saved (when, as an ISO date), from (the save it came from), holds (the
+// saves whose copies were brought back into it, so a record inside another is never added twice; a file without it
+// holds none), settings, stats (by way of playing, as the save keeps them) }. A later version of Patience still reads
+// version 1.
 const RECORD_VERSION = 1;
 $('b-save').addEventListener('click', () => {
   const when = new Date();
-  const copy = { patience: 'record', version: RECORD_VERSION, saved: when.toISOString(), from: saveName, settings, stats };
+  const copy = { patience: 'record', version: RECORD_VERSION, saved: when.toISOString(), from: saveName, holds: [...brought], settings, stats };
   const day = [when.getFullYear(), when.getMonth() + 1, when.getDate()].map(n => String(n).padStart(2, '0')).join('-');
   const name = `patience-record-${day}.json`;
   const a = document.createElement('a');
@@ -770,6 +772,10 @@ function bringBack(copy) {
   if (copy.version > RECORD_VERSION) return 'That record was saved by a newer Patience. Reload this page to bring it back.';
   if (copy.from === saveName) return 'That’s this phone’s own record. It’s here already.';
   if (typeof copy.from === 'string' && brought.has(copy.from)) return 'A record from that phone is here already.';
+  // A copy from a phone that a record from here, or one brought back here, was added to has those games in it too.
+  const holds = Array.isArray(copy.holds) ? copy.holds.filter(x => typeof x === 'string') : [];
+  if (holds.includes(saveName)) return 'That record has this phone’s own record in it, so it would count games twice.';
+  if (holds.some(x => brought.has(x))) return 'That record holds one that’s here already, so it would count games twice.';
   for (const v of Object.keys(VARIANTS)) {
     const st = stats[v], r = record(copy.stats[v]);
     st.played += r.played;
@@ -783,6 +789,7 @@ function bringBack(copy) {
     apply();
   }
   if (typeof copy.from === 'string') brought.add(copy.from);
+  for (const x of holds) brought.add(x);
   write();
   const when = new Date(copy.saved);
   const day = Number.isNaN(when.getTime()) ? '' : ` from ${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
