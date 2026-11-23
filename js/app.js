@@ -112,6 +112,7 @@ function drawFor(c, again) {
   if (!again || $('toast-words').textContent !== words) toast(words, [], 0);
   noting = true;
   drawingFor = c;
+  if (!again) placeToast(); // now it's known to be the note, clear of the deck
 }
 
 // ---- the line a screen reader reads out ----
@@ -690,10 +691,40 @@ function toast(text, actions = [], ms = actions.length ? 9000 : 4000) {
     t.append(acts);
   }
   t.hidden = false;
+  placeToast();
   clearTimeout(toastTimer);
   if (ms) toastTimer = setTimeout(hideToast, ms);
 }
 function hideToast() { $('toast').hidden = true; clearTimeout(toastTimer); noting = false; drawingFor = null; }
+
+// Held sideways, the columns reach down to where a message sits, at the bottom in the middle. If it would cover a card
+// there, it goes where it covers none: the bottom left of the table, the bottom right, or the top in the middle (but not
+// Hint's note on the card it's drawing for, if the deck it lights up would be under it), or else where it covers fewest.
+// Upright, the columns don't reach it.
+const sideways = matchMedia('(orientation: landscape) and (max-height: 520px)');
+function placeToast() {
+  const t = $('toast');
+  delete t.dataset.place;
+  if (t.hidden || !sideways.matches || !table.m) return;
+  const r = table.el.getBoundingClientRect();
+  t.style.setProperty('--table-left', `${r.left}px`);
+  t.style.setProperty('--table-right', `${innerWidth - r.right}px`);
+  t.style.setProperty('--table-top', `${r.top}px`);
+  t.style.setProperty('--table-middle', `${(r.left + r.right) / 2}px`);
+  t.style.setProperty('--table-width', `${r.width}px`);
+  let best = null;
+  for (const place of ['', 'left', 'right', 'top']) {
+    if (place) t.dataset.place = place;
+    // Measured as it settles: it rises into place from 8 px lower.
+    const b = t.getBoundingClientRect(), under = table.under({ left: b.left, right: b.right, top: b.top - 8, bottom: b.bottom });
+    if (noting && under.deck) continue;
+    if (!best || under.cards < best.cards) best = { place, cards: under.cards };
+    if (!under.cards) break;
+  }
+  if (best?.place) t.dataset.place = best.place; else delete t.dataset.place;
+}
+// Again once the table has its new size, when the phone is turned.
+new ResizeObserver(() => requestAnimationFrame(placeToast)).observe(table.el);
 
 document.addEventListener('keydown', e => {
   if (!$('sheet-new').hidden || !$('sheet-menu').hidden) { if (e.key === 'Escape') closeSheets(); return; }

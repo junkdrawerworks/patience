@@ -1979,6 +1979,47 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cz.close();
 }
 
+// Held sideways, the columns reach down to where a message sits, so it goes where it covers no card: two-suit Spider
+// with two long columns in the middle and an empty one, and a tap on the deck, at 844 by 390 and 740 by 360. Upright,
+// it's where it always was.
+{
+  const cq = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pq = await cq.newPage();
+  await pq.goto(base);
+  await pq.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const covered = () => pq.evaluate(() => {
+    const t = document.getElementById('toast').getBoundingClientRect();
+    return [...document.querySelectorAll('#table .card:not(.deep):not(.down)')].filter(el => {
+      const b = el.getBoundingClientRect();
+      return b.bottom > t.top && b.top < t.bottom && b.right > t.left && b.left < t.right;
+    }).length;
+  });
+  for (const [width, height] of [[844, 390], [740, 360]]) {
+    await pq.setViewportSize({ width, height });
+    await pq.evaluate(async () => {
+      const { VARIANTS } = await import('./js/games/index.js');
+      const s = VARIANTS.s2.game.deal(5, 's2'), all = [...s.stock];
+      s.tab.forEach(t => all.push(...t.down, ...t.up));
+      const tab = Array.from({ length: 10 }, () => ({ down: [], up: [] }));
+      for (let i = 0; i < 9; i++) { tab[i].down = all.splice(0, 4); tab[i].up = all.splice(0, i === 4 ? 21 : i === 5 ? 18 : 3); }
+      window.patience.load({ ...s, stock: all.splice(0, 10), tab, moves: 400 }, 0);
+    });
+    await pq.waitForTimeout(300);
+    await pq.tap('.spot[data-pile="stock"]', { force: true });
+    await pq.waitForSelector('#toast:not([hidden])');
+    await pq.waitForTimeout(400);
+    assert.equal(await covered(), 0, `at ${width} by ${height}, the message about empty columns covers no card`);
+    // Turned upright, it goes back to the middle at the bottom, just above the buttons.
+    await pq.setViewportSize({ width: height, height: width });
+    await pq.waitForTimeout(300);
+    assert.equal(await pq.getAttribute('#toast', 'data-place'), null, 'upright, the message is where it always is');
+    await pq.setViewportSize({ width, height });
+    await pq.waitForTimeout(300);
+    assert.equal(await covered(), 0, `turned back to ${width} by ${height}, it covers no card`);
+  }
+  await cq.close();
+}
+
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.
 {
   const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });

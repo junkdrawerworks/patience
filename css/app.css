@@ -427,9 +427,18 @@ button { font: inherit; color: inherit; }
 /* A finger's worth of target, 44 px tall, though the button looks smaller. */
 .toast button::after { content: ''; position: absolute; left: -4px; right: -4px; top: 50%; height: 44px; translate: 0 -50%; }
 @keyframes rise { from { opacity: 0; translate: 0 8px; } }
-/* With the buttons down the side, there's no bar to sit above. */
+/* With the buttons down the side, there's no bar to sit above. It sits under the middle of the table, narrower, so it
+   also fits in a corner, which is where it goes when the columns reach down under it (data-place, from app.js; the
+   --table- sizes are where the table is on the screen). */
 @media (orientation: landscape) and (max-height: 520px) {
-  .toast { bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .toast {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: var(--table-middle, 50%);
+    max-width: min(440px, calc(var(--table-width, 100vw) * 0.48));
+  }
+  .toast[data-place='left'] { left: calc(var(--table-left) + 10px); transform: none; }
+  .toast[data-place='right'] { left: auto; right: calc(var(--table-right) + 10px); transform: none; }
+  .toast[data-place='top'] { top: calc(var(--table-top) + 8px); bottom: auto; }
 }
 
 /* ---- sheets (new game, menu) ---- */

@@ -571,6 +571,20 @@ export class Table {
     this.shown = null;
   }
 
+  // How many face-up cards a box on the screen (a message, say) covers, at the places they're going to if they're on
+  // their way, and whether it covers the deck.
+  under(box) {
+    const r = this.el.getBoundingClientRect(), m = this.m;
+    const hit = (x, y) => r.left + x < box.right && r.left + x + m.cw > box.left && r.top + y < box.bottom && r.top + y + m.ch > box.top;
+    const deck = id => m.kind[id] === 'stock' || m.kind[id] === 'deals';
+    let cards = 0, onDeck = m.piles.some(id => deck(id) && hit(m.spot[id], m.top));
+    for (const p of this.at.values()) {
+      if (p.up && !p.deep && hit(p.x, p.y)) cards++;
+      if (deck(p.pile) && !p.deep && hit(p.x, p.y)) onDeck = true;
+    }
+    return { cards, deck: onDeck };
+  }
+
   // Where a card is on screen, for the winning animation.
   rectOf(c) {
     const r = this.el.getBoundingClientRect(), p = this.at.get(c);
