@@ -39,6 +39,7 @@ test('foundations start with an ace and follow suit', () => {
   assert.ok(canDrop(s, [card(H, 2)], 'f2'));
   assert.ok(!canDrop(s, [card(D, 2)], 'f2'));
   assert.ok(!canDrop(s, [card(H, 2), card(S, 1)], 'f2'), 'one card at a time');
+  assert.equal(move(s, 'f2', 1, 'f0'), null, 'an ace on a foundation stays there: a card comes back down only to a column');
 });
 
 test('moving a run turns over the card underneath', () => {

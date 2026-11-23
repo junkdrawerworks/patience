@@ -70,7 +70,8 @@ export function canDrop(s, cards, to) {
   if (!cards || !cards.length) return false;
   const c = cards[0];
   if (isFound(to)) {
-    if (cards.length !== 1) return false;
+    // A card already up (an ace moving to another foundation) comes back down only to a column.
+    if (cards.length !== 1 || s.found.some(f => top(f) === c)) return false;
     const f = s.found[col(to)];
     if (!f.length) return rankOf(c) === 1;
     return suitOf(top(f)) === suitOf(c) && rankOf(top(f)) === rankOf(c) - 1;
