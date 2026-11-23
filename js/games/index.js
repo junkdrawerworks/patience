@@ -22,6 +22,10 @@
 //   move(s, from, n, to)    the new state, or null if the rules say no
 //   stock(s)                the new state after tapping the stock, or null; stockNote(s) says why not, if it matters:
 //                           { text, piles }, piles being any to light up (the empty columns Spider wants filled)
+//   dropNote(s, cards, to)  only Klondike and FreeCell: why cards let go on pile `to` can't go there, if it's a rule a
+//                           newcomer mightn't know, or null (a king for an empty Klondike column; room for a FreeCell run)
+//   liftNote(s, id, index)  only Spider: why the cards from face-up card `index` of a pile up can't be picked up, or null;
+//                           said the first time in a deal that they're dragged anyway (a tap only shakes them)
 //   tapTarget(s, from, n)   where a tap sends the top n cards of a pile, or null
 //   autoStep(s)             a card that can go up by itself because nothing could need it, or null
 //   won(s), finishable(s), finishStep(s)    finished; ready to finish by itself; the next card when it does, as a move,

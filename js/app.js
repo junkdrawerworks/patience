@@ -70,7 +70,16 @@ const table = new Table($('table'), {
   },
   move: (pile, n, to) => { if (!act(G().move(game, pile, n, to), { from: pile, n, to })) table.render(game); },
   touched: deck => { if (!(deck && noting)) hideToast(); }, // a tap on the deck may be the draw Hint's note asks for
+  // A drag the rules turned down, for a reason a newcomer mightn't know: say why, in a line (picking up, once a deal).
+  refused: ({ from, cards, to, index }) => {
+    if (over()) return;
+    const why = to ? G().dropNote?.(game, cards, to) : !liftNoted && G().liftNote?.(game, from, index);
+    if (!why) return;
+    if (!to) liftNoted = true;
+    toast(why);
+  },
 });
+let liftNoted = false; // the game has said why cards couldn't be picked up, this deal
 // A Back that comes while a card is held, or just after the browser took a touch away from the table (as Android's
 // back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays as it was.
 // A Back meant to leave still leaves.
@@ -293,6 +302,7 @@ function start(state, again) {
   else { elapsed = 0; since = 0; counted = false; }
   winCounted = false;
   winNews = null;
+  liftNoted = false;
   // A deal just checked comes with the way through, for Hint's first press.
   const way = !again && dealer.pathFor(state.v, state.deal);
   if (way) primeLine(state, way, settings.auto);

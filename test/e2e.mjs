@@ -1785,6 +1785,81 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ch.close();
 }
 
+// A drag the rules turn down for a reason a newcomer mightn't know says why: a card that isn't a king let go on an empty
+// Klondike column, a FreeCell run longer than there's room for, and (once a deal) a Spider run of mixed suits picked up.
+// A tap that can't go only shakes, as before, and says nothing.
+{
+  const cw = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const pw2 = await cw.newPage();
+  const errors = [];
+  pw2.on('pageerror', e => errors.push(e.message));
+  const ready = () => pw2.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const box = sel => pw2.locator(sel).boundingBox();
+  const dragTo = async (from, to) => {
+    await pw2.mouse.move(from.x, from.y);
+    await pw2.mouse.down();
+    await pw2.mouse.move(to.x, to.y, { steps: 6 });
+    await pw2.mouse.up();
+    await pw2.waitForTimeout(300);
+    await ready();
+  };
+  const said = async () => (await pw2.isHidden('#toast')) ? null : pw2.textContent('#toast-words');
+  await pw2.goto(base);
+  await ready();
+  await pw2.evaluate(() => { window.patience.settings.auto = false; window.patience.stats.k1.played = 1; window.patience.stats.fc.played = 1; window.patience.stats.s2.played = 1; });
+
+  // Klondike deal 11705 with its fourth column taken away (into the deck), and a card that isn't a king dragged there.
+  const k = await pw2.evaluate(async () => {
+    const { klondike } = await import('./js/games/klondike.js');
+    const s = klondike.deal(11705, 'k1');
+    s.stock = [...s.stock, ...s.tab[3].down, ...s.tab[3].up];
+    s.tab[3] = { down: [], up: [] };
+    window.patience.load(s);
+    return { top: s.tab.map(t => t.up.at(-1)).find(c => c !== undefined && c % 13 !== 12), moves: s.moves };
+  });
+  let c = await box(`.card[data-c="${k.top}"]`), e = await box('.spot[data-pile="t3"]');
+  await dragTo({ x: c.x + c.width / 2, y: c.y + 15 }, { x: e.x + e.width / 2, y: e.y + 20 });
+  assert.equal(await said(), 'Only a king can go in an empty column.');
+  assert.equal((await pw2.evaluate(() => window.patience.state)).moves, k.moves, 'and the card went back');
+  await pw2.keyboard.press('Escape');
+
+  // FreeCell: five cards in order, one free cell and one column empty, so only four can move together.
+  await pw2.evaluate(() => {
+    const S = 0, H = 1, C = 2, D = 3, card = (suit, rank) => suit * 13 + rank - 1;
+    const run = [card(S, 9), card(H, 8), card(C, 7), card(D, 6), card(S, 5)], cells = [card(H, 2), card(H, 3), card(C, 2), null];
+    const rest = Array.from({ length: 52 }, (_, i) => i).filter(i => !run.includes(i) && !cells.includes(i) && i !== card(D, 10));
+    const tab = [run, [card(D, 10)], ...[0, 1, 2, 3, 4].map(i => rest.slice(i * 9, i * 9 + 9)), []];
+    window.patience.load({ v: 'fc', deal: 617, tab, cells, found: [[], [], [], []], moves: 30 });
+  });
+  c = await box('.card[data-c="8"]'); e = await box('.card[data-c="48"]');
+  await dragTo({ x: c.x + c.width / 2, y: c.y + 10 }, { x: e.x + e.width / 2, y: e.y + e.height / 2 });
+  assert.equal(await said(), 'There’s room to move 4 cards together. Free a cell or a column to move 5.');
+  assert.equal((await pw2.evaluate(() => window.patience.state)).moves, 30, 'and the run went back');
+  await pw2.keyboard.press('Escape');
+
+  // Two-suit Spider deal 1, with the 7 of spades and 6 of hearts from the deck on the first column.
+  const sp = await pw2.evaluate(async () => {
+    const { spider } = await import('./js/games/spider.js');
+    const s = spider.deal(1, 's2');
+    const a = s.stock.find(c => c % 52 === 6), b = s.stock.find(c => c % 52 === 13 + 5);
+    s.stock = s.stock.filter(c => c !== a && c !== b);
+    s.tab[0].up.push(a, b);
+    window.patience.load(s);
+    return { a };
+  });
+  c = await box(`.card[data-c="${sp.a}"]`);
+  await pw2.mouse.click(c.x + c.width / 2, c.y + 8);
+  await pw2.waitForTimeout(300);
+  assert.equal(await said(), null, 'a tap on the 7 only shakes it');
+  await dragTo({ x: c.x + c.width / 2, y: c.y + 8 }, { x: c.x + c.width / 2 + 60, y: c.y + 120 });
+  assert.equal(await said(), 'Only a run of one suit moves together.');
+  await pw2.keyboard.press('Escape');
+  await dragTo({ x: c.x + c.width / 2, y: c.y + 8 }, { x: c.x + c.width / 2 + 60, y: c.y + 120 });
+  assert.equal(await said(), null, 'said once a deal');
+  assert.deepEqual(errors, [], 'errors on a drag turned down');
+  await cw.close();
+}
+
 // A card let go where it was picked up, nudged a little, stays in its column, though it would fit on the next; one let
 // go mostly over a column it can't go on goes back, though it touches one it could; one let go mostly over a column
 // it can go on goes there. One-suit Spider with a mouse, where the columns are close together.

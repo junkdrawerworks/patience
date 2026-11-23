@@ -123,6 +123,9 @@ export const spider = {
     return next;
   },
 
+  // A card with cards on it that aren't all one suit, going down in order.
+  liftNote: (s, id, index) => (id[0] === 't' && index < s.tab[col(id)].up.length - 1 ? 'Only a run of one suit moves together.' : null),
+
   stockNote(s) {
     const empty = T.filter((id, i) => !s.tab[i].up.length && !s.tab[i].down.length);
     if (!s.stock.length || canDeal(s)) return null;

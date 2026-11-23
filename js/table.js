@@ -9,7 +9,9 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const RECYCLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg>';
 
 export class Table {
-  // handlers: stock(), tap(pile, n), move(pile, n, to) (a drop, or a tap on the card Hint lit up), touched(deck)
+  // handlers: stock(), tap(pile, n), move(pile, n, to) (a drop, or a tap on the card Hint lit up), touched(deck), and
+  // refused(why): a drag the rules turned down, { from, cards, to } for cards let go where they can't go, or
+  // { from, index } for a card that couldn't be picked up, dragged anyway (a tap on it only shakes it)
   constructor(el, handlers) {
     this.el = el;
     this.on = handlers;
@@ -411,6 +413,7 @@ export class Table {
 
   down(e) {
     if (this.locked || this.drag || !this.state || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    this.balked = null;
     const s = this.state, m = this.m;
     const cardEl = e.target.closest('.card'), spot = e.target.closest('.spot');
     let pile, index;
@@ -440,8 +443,11 @@ export class Table {
     if (!cards) {
       // The lit card on a FreeCell foundation, which stays there.
       if (hinted && index === this.game.pile(s, pile).up.length - 1) { this.on.move(h.from, h.n, h.to); return; }
-      // A face-up card that can't come up with the cards on top of it.
-      if (cardEl) this.shakeCards([+cardEl.dataset.c]);
+      // A face-up card that can't come up with the cards on top of it. If it's dragged anyway, the game may say why.
+      if (cardEl) {
+        this.shakeCards([+cardEl.dataset.c]);
+        this.balked = { pile, index, x0: e.clientX, y0: e.clientY, id: e.pointerId, mouse: e.pointerType === 'mouse' };
+      }
       return;
     }
     this.drag = { pile, n: cards.length, cards, x0: e.clientX, y0: e.clientY, moved: false, id: e.pointerId, mouse: e.pointerType === 'mouse' };
@@ -449,6 +455,11 @@ export class Table {
   }
 
   moveDrag(e) {
+    const b = this.balked;
+    if (b && e.pointerId === b.id && Math.hypot(e.clientX - b.x0, e.clientY - b.y0) >= (b.mouse ? 4 : 8)) {
+      this.balked = null;
+      this.on.refused?.({ from: b.pile, index: b.index });
+    }
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
     const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
@@ -513,6 +524,7 @@ export class Table {
   }
 
   up(e, cancelled) {
+    if (this.balked?.id === e.pointerId) this.balked = null;
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
     this.endDrag();
@@ -529,16 +541,23 @@ export class Table {
       return;
     }
     this.flyNext = new Set(d.cards);
-    const to = cancelled || !still ? null : this.dropTarget(d);
-    if (to) this.on.move(d.pile, d.n, to);
-    else this.render(this.state);
+    const over = cancelled || !still ? null : this.overPile(d);
+    if (over && this.game.canDrop(this.state, d.cards, over)) { this.on.move(d.pile, d.n, over); return; }
+    this.render(this.state);
+    if (over) this.on.refused?.({ from: d.pile, cards: d.cards, to: over });
   }
 
-  // Where the dragged cards go when let go: the pile they're most over, if they may go there and aren't already in it,
-  // and only if they're well over it, a third of a card or the card's middle in the pile's area. Otherwise they go back,
-  // so a card nudged a little stays in its own column, and one let go mostly over a column it can't go on doesn't go
-  // to the next one along instead.
+  // Where the dragged cards go when let go: the pile they're most over, if they may go there (see overPile).
   dropTarget(d) {
+    const to = this.overPile(d);
+    return to && this.game.canDrop(this.state, d.cards, to) ? to : null;
+  }
+
+  // The pile the dragged cards are most over, if they aren't already in it, and only if they're well over it, a third
+  // of a card or the card's middle in the pile's area; whether they may go there or not. Otherwise they go back, so a
+  // card nudged a little stays in its own column, and one let go mostly over a column it can't go on doesn't go to the
+  // next one along instead.
+  overPile(d) {
     const m = this.m, p = this.at.get(d.cards[0]), g = m.gap / 2;
     const r = { x: p.x + d.dx, y: p.y + d.dy, w: m.cw, h: m.ch };
     const over = z => Math.max(0, Math.min(r.x + r.w, z.x + z.w) - Math.max(r.x, z.x)) * Math.max(0, Math.min(r.y + r.h, z.y + z.h) - Math.max(r.y, z.y));
@@ -548,7 +567,7 @@ export class Table {
       const a = id === d.pile ? 0 : over(this.zone(id));
       if (a > most) { most = a; best = id; }
     }
-    if (best === d.pile || !this.game.canDrop(this.state, d.cards, best)) return null;
+    if (best === d.pile) return null;
     const z = this.zone(best), cx = r.x + r.w / 2, cy = r.y + r.h / 2;
     return most >= (r.w * r.h) / 3 || (cx >= z.x && cx < z.x + z.w && cy >= z.y && cy < z.y + z.h) ? best : null;
   }

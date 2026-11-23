@@ -277,6 +277,9 @@ export const klondike = {
   move,
   stock: draw,
   stockNote: () => null,
+  // A card that isn't a king, let go on an empty column.
+  dropNote: (s, cards, to) => (isTab(to) && !s.tab[col(to)].up.length && !s.tab[col(to)].down.length && rankOf(cards[0]) !== 13
+    ? 'Only a king can go in an empty column.' : null),
   tapTarget: bestTarget,
   autoStep,
   won,

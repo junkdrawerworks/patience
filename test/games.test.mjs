@@ -88,6 +88,47 @@ test('a FreeCell run going into an empty column has room for fewer cards, as the
   assert.match(help, /doubled for each empty column it isn't going into/);
 });
 
+test('a FreeCell run too long for the room says how many cards can move together, and only then', () => {
+  const s = emptyFC();
+  s.tab[0] = [card(S, 9), card(H, 8), card(C, 7), card(D, 6), card(S, 5)];
+  s.tab[1] = [card(D, 10)];
+  s.tab[2] = [card(C, 13)]; s.tab[3] = [card(D, 13)]; s.tab[4] = [card(H, 13)]; s.tab[5] = [card(S, 13)]; s.tab[6] = [card(C, 12)];
+  s.cells = [card(H, 2), card(H, 3), card(C, 2), null];
+  const run = n => s.tab[0].slice(-n);
+  assert.equal(freecell.dropNote(s, run(5), 't1'), 'There’s room to move 4 cards together. Free a cell or a column to move 5.');
+  assert.equal(freecell.dropNote(s, run(4), 't1'), null, 'four fit');
+  assert.equal(freecell.dropNote(s, run(3), 't7'), 'There’s room to move 2 cards together. Free a cell or a column to move 3.', 'into the empty column');
+  assert.equal(freecell.dropNote(s, run(4), 't2'), null, 'the wrong card to go on says nothing');
+  assert.equal(freecell.dropNote(s, run(2), 'c3'), null, 'nor does a free cell');
+  s.cells[3] = card(C, 3);
+  s.tab[7] = [card(D, 12)];
+  assert.equal(freecell.dropNote(s, run(2), 't1'), null, 'the 6 and 5 can’t go on the 10');
+  assert.equal(freecell.dropNote(s, run(5), 't1'), 'There’s room to move 1 card at a time. Free a cell or a column to move 5.');
+});
+
+test('a Klondike card that isn’t a king, let go on an empty column, says only a king can go there', async () => {
+  const { klondike } = await import('../js/games/klondike.js');
+  const s = klondike.deal(1, 'k1');
+  const t = { ...s, tab: s.tab.map((c, i) => (i === 0 ? { down: [], up: [] } : c)) };
+  assert.equal(klondike.dropNote(t, [card(H, 6)], 't0'), 'Only a king can go in an empty column.');
+  assert.equal(klondike.dropNote(t, [card(H, 13)], 't0'), null);
+  assert.equal(klondike.dropNote(t, [card(H, 6)], 't1'), null, 'a column with cards in it');
+  assert.equal(klondike.dropNote(t, [card(H, 6)], 'f0'), null, 'a foundation');
+});
+
+test('a Spider run of mixed suits says why it can’t be picked up', () => {
+  const s = spiderEnd('s2', [2, 2], [
+    [[], [sp(13), sp(12), ht(11), ht(10)]],
+    [[], [ht(13), ht(12), ht(11), ht(10), ht(9), ht(8), ht(7), ht(6), ht(5), ht(4), ht(3), ht(2), ht(1)]],
+    [[], [sp(13), sp(12), sp(11), sp(10), sp(9), sp(8), sp(7), sp(6), sp(5), sp(4), sp(3), sp(2), sp(1)]],
+    [[], [sp(11), sp(10), sp(9), sp(8)]], [[], [sp(7), sp(6), sp(5), sp(4), sp(3), sp(2), sp(1)]], [[], [ht(13), ht(12)]],
+    [[], [ht(9), ht(8), ht(7)]], [[], [ht(6), ht(5)]], [[], [ht(4), ht(3)]], [[], [ht(2), ht(1)]],
+  ]);
+  assert.equal(spider.lift(s, 't0', 1), null);
+  assert.equal(spider.liftNote(s, 't0', 1), 'Only a run of one suit moves together.');
+  assert.ok(spider.lift(s, 't0', 2), 'the jack and 10 of hearts come up');
+});
+
 test('a FreeCell tap sends a card up, then onto a column, then into a free cell', () => {
   const s = emptyFC();
   s.tab[0] = [card(D, 9), card(S, 1)];

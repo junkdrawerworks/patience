@@ -111,6 +111,13 @@ export const freecell = {
 
   stock: () => null,
   stockNote: () => null,
+  // A run that would fit where it's let go, but is longer than there's room to move together.
+  dropNote(s, cards, to) {
+    if (to[0] !== 't' || !isRun(cards)) return null;
+    const t = s.tab[col(to)], n = room(s, !t.length);
+    if (cards.length <= n || (t.length && !stacks(cards[0], top(t)))) return null;
+    return `There’s room to move ${n === 1 ? '1 card at a time' : `${n} cards together`}. Free a cell or a column to move ${cards.length}.`;
+  },
 
   // A tap sends a card up if it can go, otherwise onto a card it fits, otherwise into an empty column. A single card
   // tapped from a column tries a free cell before an empty column, keeping the empty column for a run.
