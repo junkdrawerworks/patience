@@ -65,12 +65,17 @@ export class Table {
     // Wide enough for every column, and short enough that a long column still fits below the top row.
     // `rows` is how many card heights that takes: in Klondike, a few face-down cards and eleven face-up ones
     // still showing their corners; Spider's columns run longer.
-    let cw = Math.min((W - 2 * side - (cols - 1) * gap) / cols, (H - 2 * pad - rowGap) / (1.4 * (L.rows || 4.9)), 124);
-    cw = Math.max(20, Math.floor(cw));
+    // A column longer than that, even with its cards stepped as close as they go (see place()), makes the cards smaller,
+    // and smaller cards need a little more of each card showing to read its rank (see stepUp()). But not below 28 px
+    // across (about a phone's Spider cards held upright), where they'd be harder to read than a closer column.
+    const fit = rows => Math.max(20, Math.floor(Math.min((W - 2 * side - (cols - 1) * gap) / cols, (H - 2 * pad - rowGap) / (1.4 * rows), 124)));
+    const usual = fit(L.rows || 4.9), least = Math.min(usual, 28);
+    let step = stepUp(usual), cw = Math.max(least, fit(rowsFor(s, L, step)));
+    for (let i = 0; i < 4 && stepUp(cw) > step; i++) { step = stepUp(cw); cw = Math.max(least, fit(rowsFor(s, L, step))); }
     const ch = Math.round(cw * 1.4);
     const left = Math.round((W - (cols * cw + (cols - 1) * gap)) / 2);
     const x = Array.from({ length: cols }, (_, i) => left + i * (cw + gap));
-    const m = { W, H, pad, gap, cw, ch, top: pad, tabY: pad + ch + rowGap, x, spot: {}, kind: {}, dir: {}, order: {}, layoutKey: layoutKey(s, this.left) };
+    const m = { W, H, pad, gap, cw, ch, top: pad, tabY: pad + ch + rowGap, x, spot: {}, kind: {}, dir: {}, order: {}, step, layoutKey: layoutKey(s, this.left, step) };
     L.top.forEach((p, i) => { m.spot[p.id] = x[p.col]; m.kind[p.id] = p.kind; m.dir[p.id] = p.dir || 1; m.order[p.id] = i; });
     L.tableau.forEach((id, i) => { m.spot[id] = x[i]; m.kind[id] = 'column'; m.order[id] = 100 + i; });
     m.piles = [...L.top.map(p => p.id), ...L.tableau];
@@ -136,7 +141,11 @@ export class Table {
         const nd = down.length, nu = up.length;
         let dStep = m.ch * 0.13, uStep = m.ch * 0.36;
         const need = () => nd * dStep + Math.max(0, nu - 1) * uStep;
-        if (need() > room) dStep = Math.max(m.ch * 0.05, nd ? (room - Math.max(0, nu - 1) * uStep) / nd : 0);
+        // No closer than STEP_DOWN and m.step, which still shows a face-up card's rank in full; the cards are sized so
+        // that the longest column fits that way (see rowsFor()).
+        if (need() > room) dStep = Math.max(m.ch * STEP_DOWN, nd ? (room - Math.max(0, nu - 1) * uStep) / nd : 0);
+        if (need() > room && nu > 1) uStep = Math.max(m.ch * m.step, (room - nd * dStep) / (nu - 1));
+        // With the cards as small as they go and the column still too long, closer than that rather than off the bottom.
         if (need() > room && nu > 1) uStep = Math.max(m.ch * 0.2, (room - nd * dStep) / (nu - 1));
         let y = m.tabY;
         down.forEach((c, i) => { put(c, x0, y, z0 + i, false, -1, false); y += dStep; });
@@ -153,7 +162,7 @@ export class Table {
     if (s !== this.state) this.clearHint();
     this.state = s;
     if (first) this.setup(s);
-    if (!this.m || this.m.layoutKey !== layoutKey(s, this.left)) this.layout();
+    if (!this.m || this.m.layoutKey !== layoutKey(s, this.left, this.m.step)) this.layout();
     const at = this.place(s), m = this.m;
     if (opts.still || (first && !opts.deal)) this.el.classList.add('still');
 
@@ -378,8 +387,28 @@ export class Table {
   }
 }
 
-// What the layout depends on, besides the size of the table.
-const layoutKey = (s, left) => `${s.v}:${left ? 'L' : 'R'}`;
+// The least of itself, in card heights, a card in a column shows under the next one. Face down, an edge. Face up, the
+// whole of its rank, a Q's tail and all, so it doesn't read O: the rank is max(12px, 0.36 of the card's width) tall and
+// starts 2.5% of the way down (.ix in the stylesheet), so on small cards it's a larger part of the card.
+const STEP_DOWN = 0.05;
+const stepUp = cw => Math.max(12, 0.36 * cw) / (1.4 * cw) + 0.025;
+
+// How many card heights tall the table needs to be: the game's own allowance (L.rows, 4.9 if it gives none), or more if
+// a column is longer than that even with its face-up cards `up` apart, plus the row at the top. In half cards, so the
+// cards change size only now and then as a column grows or shrinks.
+function rowsFor(s, L, up) {
+  const g = gameOf(s);
+  let col = 0;
+  for (const id of L.tableau) {
+    const p = g.pile(s, id);
+    col = Math.max(col, 1 + Math.max(0, p.up.length - 1) * up + p.down.length * STEP_DOWN);
+  }
+  return Math.max(L.rows || 4.9, Math.ceil((1 + col) * 2) / 2);
+}
+
+// What the layout depends on, besides the size of the table: `step` is how far apart face-up cards can go at the size
+// the cards are now.
+const layoutKey = (s, left, step) => `${s.v}:${left ? 'L' : 'R'}:${rowsFor(s, gameOf(s).layout(s, left), step)}`;
 
 function makeCard(c) {
   const el = document.createElement('div');
