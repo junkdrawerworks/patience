@@ -109,10 +109,11 @@ function drawFor(c, again) {
   const name = shortName(c);
   const words = !game.stock.length ? `Turn the deck over for the ${name}.`
     : game.waste.includes(c) ? `Keep drawing: the ${name} comes round again.` : `Draw for the ${name}.`;
-  if (!again || $('toast-words').textContent !== words) toast(words, [], 0);
+  const shown = !again || $('toast-words').textContent !== words;
+  if (shown) toast(words, [], 0);
   noting = true;
   drawingFor = c;
-  if (!again) placeToast(); // now it's known to be the note, clear of the deck
+  if (shown) placeToast(); // now it's known to be the note, clear of the deck (toast() placed it as any message)
 }
 
 // ---- the line a screen reader reads out ----
