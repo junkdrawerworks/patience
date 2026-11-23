@@ -723,6 +723,29 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ct.close();
 }
 
+// A second press of Hint while it's still thinking about the first isn't lost when the cards move in between: it
+// answers for the table as it is then. Four-suit Spider deal 35 takes the solver about 100,000 positions.
+{
+  const cp = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const pp = await cp.newPage();
+  const errors = [];
+  pp.on('pageerror', e => errors.push(e.message));
+  const ready = () => pp.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pp.goto(base);
+  await ready();
+  await pp.evaluate(() => window.patience.newGame('s4', 35));
+  await pp.waitForTimeout(2000);
+  await ready();
+  await pp.click('#b-hint');
+  assert.ok(await pp.evaluate(() => document.getElementById('b-hint').classList.contains('busy')), 'Hint is thinking');
+  await pp.click('.spot[data-pile="stock"]', { force: true });
+  assert.equal((await pp.evaluate(() => window.patience.state)).stock.length, 40, 'a row was dealt while Hint was thinking');
+  await pp.click('#b-hint');
+  await pp.waitForSelector('.hint', { timeout: 30000 });
+  assert.deepEqual(errors, [], 'errors pressing Hint twice');
+  await cp.close();
+}
+
 // Swipes near the screen's sides. On Android with gesture navigation a swipe that starts near either side is the
 // phone's Back, and Chrome has its own swipe to go Back or Forward. A swipe sideways is nobody's, so it can't run on
 // into Chrome's: the page doesn't overscroll, and the table takes every touch.

@@ -48,6 +48,7 @@ let dealing = 0;      // counts the deals asked for, so only the latest one is d
 let slow = 0;         // the timer that says a deal is still being shuffled
 let landed = 0;       // the timer that frees the table once a deal has landed
 let thinking = false; // the Hint button is searching
+let pressed = false;  // Hint was pressed again while it was searching
 let stopBounce = null;
 
 const G = () => gameOf(game);
@@ -201,11 +202,13 @@ function start(state, again) {
 }
 
 async function hint() {
-  if (thinking || table.locked || !game) return;
+  if (thinking) { pressed = true; return; } // answered once this search is done, for the table as it is then
+  if (table.locked || !game) return;
   if (over()) { toast('This one’s won.', [['New game', openNew]]); return; }
   if (chain) { setTimeout(hint, 120); return; } // let cards going up by themselves land first
   const at = game;
   thinking = true;
+  pressed = false;
   $('b-hint').classList.add('busy');
   let h;
   try {
@@ -214,7 +217,10 @@ async function hint() {
     thinking = false;
     $('b-hint').classList.remove('busy');
   }
-  if (game !== at) return; // they moved on while it was thinking
+  if (game !== at) { // they moved on while it was thinking: a press since then is for the table as it is now
+    if (pressed) hint();
+    return;
+  }
   if (h.move) {
     table.showHint(h.move);
     // Drawing for a card further down the deck, only the deck lights up, so the note says which card.
