@@ -1405,6 +1405,24 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.deepEqual(await drop(10, 0), [0, 8], 'nudged 10 px towards a column it fits on, it stays');
   assert.deepEqual(await drop(t7.x - t8.x - 12, 0), [0, 8], 'let go mostly over the 9, 12 px towards a 6, it goes back');
   assert.deepEqual(await drop(t6.x - t8.x + 12, 0), [1, 6], 'let go mostly over a 6, it goes there');
+  // While a card is held, where it would go is outlined: the 6 on the tenth column, then nothing over the 9.
+  const outlined = () => pn.evaluate(() => [...document.querySelectorAll('.target')].map(el => el.dataset.c || el.dataset.pile));
+  const held = await pn.locator(`.card[data-c="${five}"]`).boundingBox(), t9 = await box('t9');
+  const sixOn9 = await pn.evaluate(() => String(window.patience.state.tab[9].up.at(-1)));
+  await pn.mouse.move(held.x + held.width / 2, held.y + 20);
+  await pn.mouse.down();
+  await pn.mouse.move(held.x + held.width / 2 + t9.x - t6.x, held.y + 60, { steps: 6 });
+  await pn.waitForTimeout(100);
+  assert.deepEqual(await outlined(), [sixOn9], 'the 6 it would go on is outlined');
+  await pn.mouse.move(held.x + held.width / 2 + t7.x - t6.x, held.y + 60, { steps: 6 });
+  await pn.waitForTimeout(100);
+  assert.deepEqual(await outlined(), [], 'nothing is outlined over the 9');
+  await pn.mouse.move(held.x + held.width / 2 + t9.x - t6.x, held.y + 60, { steps: 6 });
+  await pn.waitForTimeout(100);
+  await pn.mouse.up();
+  await ready();
+  assert.deepEqual(await outlined(), [], 'and nothing once it is let go');
+  assert.equal(await pn.evaluate(() => window.patience.state.tab[9].up.length), 2, 'onto the 6');
   assert.deepEqual(errors, [], 'errors dropping cards');
   await cn.close();
 }

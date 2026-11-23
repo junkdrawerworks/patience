@@ -252,6 +252,7 @@ export class Table {
       }
     }
     this.at = at;
+    if (holding) this.aim();
     for (const id of m.piles) {
       if (m.kind[id] !== 'stock') continue;
       const pile = this.game.pile(s, id), waste = this.game.pile(s, 'waste');
@@ -349,6 +350,21 @@ export class Table {
       const p = this.at.get(c);
       this.cards.get(c).style.transform = `translate(${Math.round(p.x + dx)}px, ${Math.round(p.y + dy)}px)`;
     }
+    this.aiming ||= requestAnimationFrame(() => { this.aiming = 0; this.aim(); });
+  }
+
+  // Outline where the cards held would go if let go now: the top card of that pile, or its empty place.
+  aim() {
+    const d = this.drag, to = d?.moved && this.dropTarget(d);
+    let el = null;
+    if (to) {
+      const { down, up } = this.game.pile(this.state, to), top = up.length ? up[up.length - 1] : down[down.length - 1];
+      el = top === undefined ? this.spots[to] : this.cards.get(top);
+    }
+    if (el === this.aimed) return;
+    this.aimed?.classList.remove('target');
+    el?.classList.add('target');
+    this.aimed = el;
   }
 
   // Whether the cards picked up are still the cards on top of the pile they came from, in table `s`.
@@ -361,6 +377,7 @@ export class Table {
   endDrag() {
     const d = this.drag;
     this.drag = null;
+    this.aim();
     if (d) for (const c of d.cards) this.cards.get(c)?.classList.remove('drag');
   }
 
