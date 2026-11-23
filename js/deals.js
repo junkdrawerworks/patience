@@ -5,13 +5,23 @@ import { VARIANTS, gameOf } from './games/index.js';
 import { FOUR_SUIT_DEALS } from './games/spider-deals.js';
 
 // Run a search in slices of a few milliseconds. Resolves with the search once it knows,
-// or once it has looked at `max` positions.
-function think(search, max) {
+// or once it has looked at `max` positions. Each step is sized by how long the last one took, aiming at about 4 ms
+// (a position can take ten times longer on a slow phone than here), and a slice ends once 8 ms have gone. The limit is
+// still counted in positions, so a search finds the same answer however fast the phone is. While `wait()` says so
+// (a card being dragged, cards being dealt), it doesn't step at all, and looks again a little later.
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function think(search, max, wait) {
   return new Promise(resolve => {
+    let n = 100;
     const tick = () => {
+      if (wait?.()) { setTimeout(tick, 60); return; }
       const t0 = performance.now();
-      while (performance.now() - t0 < 8) {
-        if (search.step(800) || search.nodes >= max) { resolve(search); return; }
+      for (;;) {
+        const t1 = performance.now();
+        if (search.step(Math.min(n, max - search.nodes)) || search.nodes >= max) { resolve(search); return; }
+        const t2 = performance.now();
+        n = Math.round(clamp((n * 4) / Math.max(t2 - t1, 0.1), 20, 2000));
+        if (t2 - t0 >= 8) break;
       }
       setTimeout(tick, 0);
     };
@@ -20,18 +30,22 @@ function think(search, max) {
 }
 
 // Keeps a winnable deal ready for the way you're playing, so New game doesn't have to wait.
+// busy(): whether the page is busy (a card being dragged, cards being dealt, Hint thinking), so a deal being found in
+// the background should wait. One a new game is waiting for doesn't.
 export class Dealer {
-  constructor(ready, onReady) {
+  constructor(ready, onReady, busy) {
     this.ready = { ...ready }; // way of playing -> deal number
     this.jobs = {};
     this.onReady = onReady;
+    this.busy = busy;
   }
 
-  async find(v) {
+  async find(v, job) {
     const game = VARIANTS[v].game;
+    const wait = job && (() => !job.claimed && !!this.busy?.());
     for (;;) {
       const n = game.randomDeal();
-      const s = await think(game.search(game.deal(n, v)), game.budget.deal);
+      const s = await think(game.search(game.deal(n, v)), game.budget.deal, wait);
       if (s.result === 'won') return n;
     }
   }
@@ -58,7 +72,7 @@ export class Dealer {
   prepare(v) {
     if (this.ready[v] || this.jobs[v]) return;
     const job = { claimed: false };
-    job.promise = this.find(v).then(n => {
+    job.promise = this.find(v, job).then(n => {
       delete this.jobs[v];
       if (!job.claimed) { this.ready[v] = n; this.onReady?.(this.ready); }
       return n;

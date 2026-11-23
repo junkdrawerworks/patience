@@ -72,7 +72,7 @@ const table = new Table($('table'), {
 // back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays as it was.
 // A Back meant to leave still leaves.
 guardEdges({ surfaces: [table.el] });
-const dealer = new Dealer(readyOf(saved.next), () => write());
+const dealer = new Dealer(readyOf(saved.next), () => write(), () => !!table.drag || table.locked || thinking);
 
 // ---- playing ----
 
