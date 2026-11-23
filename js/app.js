@@ -13,7 +13,7 @@ const KEY = 'patience.v1';
 const $ = id => document.getElementById(id);
 const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four: false, left: false, look: 'phone' };
 const LOOKS = ['phone', 'light', 'dark']; // Look in the menu: whatever the phone is set to, or light or dark whatever it says
-const blank = () => ({ played: 0, won: 0, streak: 0, best: 0, fastest: 0 });
+const blank = () => ({ played: 0, won: 0, streak: 0, best: 0, fastest: 0, fewest: 0 });
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const shapes = {}; // a new deal of each way of playing, for the shape of a saved game (see sound())
 
@@ -24,7 +24,8 @@ const settingsOf = saved => {
   if (!LOOKS.includes(s.look)) s.look = 'phone';
   return s;
 };
-// Counts are whole numbers, and the fastest win a time; none of them below nothing.
+// Counts are whole numbers (the fewest moves a win took among them, 0 for none yet), and the fastest win a time; none
+// of them below nothing.
 const record = r => Object.fromEntries(Object.entries(blank()).map(([k, zero]) => {
   const x = r?.[k];
   return [k, Number.isFinite(x) && x >= 0 && (k === 'fastest' || Number.isInteger(x)) ? x : zero];
@@ -467,6 +468,7 @@ function recordWin() {
   st.streak++;
   st.best = Math.max(st.best, st.streak);
   st.fastest = st.fastest ? Math.min(st.fastest, elapsed) : elapsed;
+  if (game.moves) st.fewest = st.fewest ? Math.min(st.fewest, game.moves) : game.moves;
   counted = false;
   write();
 }
@@ -595,6 +597,7 @@ function showStats(v) {
     ['Streak', st.streak],
     ['Best streak', st.best],
     ['Fastest', st.fastest ? clock(st.fastest) : '–'],
+    ['Fewest moves', st.fewest ? st.fewest.toLocaleString('en-US') : '–'],
   ]);
 }
 

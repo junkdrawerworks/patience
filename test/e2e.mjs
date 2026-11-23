@@ -626,7 +626,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p4.reload();
   await p4.waitForFunction(() => window.patience?.state, null, { timeout: 20000 });
   assert.deepEqual(await p4.evaluate(() => [window.patience.settings.auto, window.patience.settings.left, window.patience.settings.clock, window.patience.settings.look]), [true, false, true, 'phone']);
-  assert.deepEqual(await p4.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 1, best: 0, fastest: 0 });
+  assert.deepEqual(await p4.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 1, best: 0, fastest: 0, fewest: 0 });
   assert.deepEqual(errors, [], 'errors starting from a damaged save');
   await c4.close();
 }
@@ -1750,6 +1750,47 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.equal(saved.game, undefined);
   assert.deepEqual(errors, []);
   await cw.close();
+}
+
+// The record keeps the fewest moves a win took: none yet for a record from before it was kept, then each win's moves
+// when it took fewer.
+{
+  const cm = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const pm = await cm.newPage();
+  await pm.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider'], stats: { k3: { played: 3, won: 1, streak: 1, best: 1, fastest: 400000 } } }));
+  });
+  const ready = () => pm.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const tile = async name => {
+    await pm.click('#b-menu');
+    await pm.selectOption('#stats-for', 'k3');
+    const text = await pm.evaluate(name => [...document.querySelectorAll('#stats div')].find(d => d.querySelector('dt').textContent === name)?.querySelector('dd').textContent, name);
+    await pm.keyboard.press('Escape');
+    return text;
+  };
+  await pm.goto(base);
+  await ready();
+  assert.equal(await tile('Fewest moves'), '–', 'none yet');
+  for (const [moves, fewest] of [[150, '151'], [89, '90'], [200, '90']]) {
+    await pm.evaluate(moves => {
+      window.patience.settings.auto = false;
+      window.patience.load({
+        v: 'k3', deal: 11705, draw: 3, stock: [], waste: [51], fan: 0, moves,
+        found: [0, 1, 2, 3].map(suit => Array.from({ length: suit === 3 ? 12 : 13 }, (_, r) => suit * 13 + r)),
+        tab: Array.from({ length: 7 }, () => ({ down: [], up: [] })),
+      });
+    }, moves);
+    await pm.click('.card[data-c="51"]', { position: { x: 12, y: 10 } });
+    await pm.waitForSelector('#won:not([hidden])');
+    await pm.mouse.click(30, 300);
+    await pm.click('#b-pick');
+    await pm.click('#b-keep');
+    assert.equal(await tile('Fewest moves'), fewest, `after a win in ${moves + 1} moves`);
+  }
+  assert.equal(await pm.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).stats.k3.fewest), 90, 'and it is kept');
+  await cm.close();
 }
 
 // Two tabs on different ways of playing: each follows the other, onto the game it carries on with, and the game it
