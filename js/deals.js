@@ -9,12 +9,14 @@ import { shuffle } from './rng.js';
 // or once it has looked at `max` positions. Each step is sized by how long the last one took, aiming at about 4 ms
 // (a position can take ten times longer on a slow phone than here), and a slice ends once 8 ms have gone. The limit is
 // still counted in positions, so a search finds the same answer however fast the phone is. While `wait()` says so
-// (a card being dragged, cards being dealt), it doesn't step at all, and looks again a little later.
+// (a card being dragged, cards being dealt), it doesn't step at all, and looks again a little later. Once `stale()` says
+// the answer isn't wanted any more (the table it was for has gone), it stops where it is and resolves.
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-function think(search, max, wait) {
+function think(search, max, wait, stale) {
   return new Promise(resolve => {
     let n = 100;
     const tick = () => {
+      if (stale?.()) { resolve(search); return; }
       if (wait?.()) { setTimeout(tick, 60); return; }
       const t0 = performance.now();
       for (;;) {
@@ -203,7 +205,9 @@ export function primeLine(state, path, auto = true) {
 //   { move: { stock: true } }   tap the stock; in Klondike, with c, the card it's drawing for, when Hint knows it
 //   { lost: true }              the search looked everywhere and there's no way through
 //   { none: true }              nothing left to do at all
-export async function hintFor(state, { auto = true } = {}) {
+//   { stale: true }             stale() said the answer wasn't wanted any more, so it stopped looking
+// The ways kept and the tables it has been circling stay as they were when it stops early.
+export async function hintFor(state, { auto = true } = {}, { stale } = {}) {
   const game = gameOf(state);
   const here = where(state);
   if (here !== circlingNext) circling = new Set();
@@ -220,15 +224,18 @@ export async function hintFor(state, { auto = true } = {}) {
   // guessed, and a guess could lose a game that could be won. It's the only game whose search the setting changes.
   let search = null;
   if (!auto && state.v === 'k3') {
-    const on = await think(game.search(state, { auto: true }), game.budget.hint);
+    const on = await think(game.search(state, { auto: true }), game.budget.hint, null, stale);
+    if (stale?.()) return { stale: true };
     if (on.result === 'won') search = on;
   }
-  search ??= await think(game.search(state, { auto }), game.budget.hint);
+  search ??= await think(game.search(state, { auto }), game.budget.hint, null, stale);
+  if (stale?.()) return { stale: true };
   // A search that leaves out moves which seldom help can't say there's no way through; look again with every move.
   // If that runs out too, Klondike's answer stands: its first search leaves out so little that a way through it missed
   // turns up quickly when there is one. Spider's leaves out more, so Hint suggests the move that looked best.
   if (search.result === 'lost' && game.searchAll) {
-    const again = await think(game.searchAll(state, { auto }), game.budget.all);
+    const again = await think(game.searchAll(state, { auto }), game.budget.all, null, stale);
+    if (stale?.()) return { stale: true };
     if (again.result || !game.lostStands) search = again;
   }
   if (search.result) circling = new Set();

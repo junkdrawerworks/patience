@@ -282,7 +282,8 @@ async function hint() {
   slowHint = setTimeout(() => { if (game === at && !table.locked) { $('status').textContent = THINKING; say(THINKING); } }, 700);
   let h;
   try {
-    h = await hintFor(game, { auto: settings.auto });
+    // A search for a table that has gone (a move, Undo or a new game) stops at once, so a press since then needn't wait.
+    h = await hintFor(game, { auto: settings.auto }, { stale: () => game !== at });
   } finally {
     thinking = false;
     $('b-hint').classList.remove('busy');

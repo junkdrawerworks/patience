@@ -487,6 +487,18 @@ test('with no time to find a way through, Hint suggests the move that looked bes
   }
 });
 
+test('a Hint search that is no longer wanted stops straight away', async () => {
+  // Four-suit deal 9: the search runs to its limit here without finding a way, which takes seconds. The player moves on
+  // after it has looked three times, and the next press (on another table) shouldn't wait behind it.
+  const s = spider.deal(9, 's4');
+  let asked = 0;
+  const t0 = performance.now();
+  const h = await hintFor(s, { auto: true }, { stale: () => ++asked > 3 });
+  assert.ok(performance.now() - t0 < 200, `took ${Math.round(performance.now() - t0)} ms`);
+  assert.equal(h.move, undefined, 'no move for a table that has gone');
+  assert.ok(h.stale);
+});
+
 test('on a deal just checked, Hint starts from the way through found then, without searching again', async () => {
   // Deals the test above follows with one search, so they're known to be won by the first search's way. The deal is
   // kept ready in the save, with its way, and the page closed and opened again before it's dealt. With cards going up
