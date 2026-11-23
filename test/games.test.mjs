@@ -327,6 +327,14 @@ test('a Spider run moved onto a card of the other suit counts when it uncovers c
   assert.deepEqual([t.tab[0].down.length, t.tab[0].up.map(name)], [0, ['2S']], 'the card underneath turned over');
 });
 
+test('Hint on a won Spider table has nothing to suggest, rather than failing', async () => {
+  // The page never asks there, but the solver calls it won with no moves to make, and Spider has no easy hints.
+  const s = { v: 's1', deal: 1, moves: 300, tab: Array.from({ length: 10 }, () => ({ down: [], up: [] })), stock: [],
+    sets: Array.from({ length: 8 }, (_, k) => Array.from({ length: 13 }, (_, r) => k * 52 + r)) };
+  assert.ok(spider.won(s));
+  assert.deepEqual(await hintFor(s), { none: true });
+});
+
 test('the four-suit deals checked in advance really are won by the solver', () => {
   assert.ok(FOUR_SUIT_DEALS.length >= 100);
   for (const n of FOUR_SUIT_DEALS.slice(0, 3)) assert.equal(spider.search(spider.deal(n, 's4')).run(spider.budget.deal), 'won', `deal ${n}`);

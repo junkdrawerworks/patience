@@ -242,7 +242,8 @@ export async function hintFor(state, { auto = true } = {}, { stale } = {}) {
   if (search.result === 'won') {
     const line = keep(follow(game, state, search.path, auto), auto);
     const m = search.path[0];
-    return { move: line.get(where(state)) ?? (m ? game.fromSolver(state, m) : game.easyHint(state)) };
+    const move = line.get(where(state)) ?? (m ? game.fromSolver(state, m) : game.easyHint?.(state));
+    return move ? { move } : { none: true };
   }
   if (search.result === 'lost') return { lost: true };
   // Ran out of time: suggest the move that looked best, unless it leads back to a table this has already happened at.

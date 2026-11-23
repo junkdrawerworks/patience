@@ -1,6 +1,7 @@
 // The games Patience plays, and the ways to play each one.
 //
 // Every game is an object with the same parts, so the table and the rest of the app don't need to know which it is.
+// A few parts only some games have, and the rest of the app does without them where a game doesn't (marked below).
 // States are plain objects that are never changed in place; each has `v` (the way of playing, a key below),
 // `deal` (the deal number) and `moves`.
 //
@@ -10,7 +11,7 @@
 //                           kinds: 'stock' and 'deals' (tap to draw or deal), 'waste', 'stack' (foundations, free cells),
 //                           'sets' (Spider's cleared runs), and 'column' for the tableau
 //   pile(s, id)             the cards in a pile: { down: [...], up: [...] }, bottom to top
-//   fan(s)                  how many waste cards are spread out (Klondike drawing three)
+//   fan(s)                  how many waste cards are spread out (drawing three); only Klondike has it
 //   cardIds(s)              every card in this game
 //   lift(s, id, index)      the cards that come up when picking up card `index` of a pile's face-up cards, or null
 //   targets(s)              the piles cards can be dropped on
@@ -21,17 +22,20 @@
 //   tapTarget(s, from, n)   where a tap sends the top n cards of a pile, or null
 //   autoStep(s)             a card that can go up by itself because nothing could need it, or null
 //   won(s), finishable(s), finishStep(s)    finished; ready to finish by itself; the next card when it does
-//   easyHint(s)             a hint for a position the solver calls as good as won
+//   easyHint(s)             a hint for a position the solver calls as good as won (Klondike and FreeCell only)
+//   position(s)             the table the way its solver sees it (FreeCell and Spider)
 //   search(s, { auto })     a solver for this position (step(budget), result, path, firstMove()); auto says whether
 //                           cards go up by themselves, which Klondike drawing three needs to know (on unless false)
-//   searchAll(s, { auto })  if search(s) leaves moves out: a solver that tries every move, to make sure before Hint says
-//                           there's no way to win (Klondike, Spider; Spider's first tries the quick moves and a few more)
+//   searchAll(s, { auto })  only where search(s) leaves moves out (Klondike, Spider): a solver that tries every move, to
+//                           make sure before Hint says there's no way to win (Spider's first tries the quick moves and a
+//                           few more)
 //   firstMoves() on either search: every first move, the most promising first, for when the best one leads back
-//   lostStands              if searchAll runs out too, the first search's "no way to win" stands (Klondike); otherwise
-//                           Hint suggests the move that looked best
+//   lostStands              only Klondike: if searchAll runs out too, the first search's "no way to win" stands; without
+//                           it, Hint suggests the move that looked best
 //   fromSolver(s, m)        a solver move as a table move: { from, n, to }, or { stock: true } (Klondike adds c, the card
 //                           it's drawing for; so does its easyHint)
 //   upAlready(s, m)         whether a solver move sending a card up is done already, the card having gone up by itself
+//                           (Klondike and FreeCell only, the games where cards go up by themselves)
 //   deadEnd(s, { auto })    a look for anything that can still help, run a slice at a time like the searches
 //                           (step(budget), nodes, run(max)): result 'dead' once it's sure nothing can (no line of moves
 //                           puts a card up, turns one over, frees a cell, empties a column or deals a row), 'live' once
