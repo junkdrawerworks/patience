@@ -402,6 +402,45 @@ test('while you do what Hint says, it keeps to the way it found instead of searc
   }
 });
 
+test('asking Hint off the way and coming back by Undo, Hint gives the same move without searching again', async () => {
+  // Follow Hint a few moves, make another move instead, ask Hint there (a new search), undo, and ask again.
+  for (const [v, n] of [['k1', 2011], ['k3', 2096], ['s2', 1001]]) {
+    const game = VARIANTS[v].game, search = game.search;
+    let searches = 0;
+    game.search = (...args) => { searches++; return search(...args); };
+    try {
+      const settle = s => { for (let st; !game.won(s) && !game.finishable(s) && (st = game.autoStep(s));) s = game.move(s, st.from, st.n, st.to); return s; };
+      const play = (s, m) => settle(m.stock ? game.stock(s) : game.move(s, m.from, m.n, m.to));
+      let s = settle(game.deal(n, v));
+      for (let i = 0; i < 4; i++) s = play(s, (await hintFor(s)).move);
+      let came = 0;
+      for (let press = 0; press < 60 && came < 3 && !game.won(s); press++) {
+        const h = await hintFor(s), before = searches;
+        // Another move: a tap on the deck or a card, the first that takes Hint off its way (there may be none here).
+        const { top, tableau } = game.layout(s);
+        const piles = [...top.filter(p => p.kind === 'waste').map(p => p.id), ...tableau];
+        const others = [{ stock: true }, ...piles.map(id => (game.pile(s, id).up.length ? { from: id, n: 1, to: game.tapTarget(s, id, 1) } : null))]
+          .filter(m => m && (m.stock || m.to) && !(m.stock && h.move.stock) && JSON.stringify(m) !== JSON.stringify(h.move));
+        for (const m of others) {
+          const t = m.stock ? game.stock(s) : game.move(s, m.from, m.n, m.to);
+          if (!t) continue;
+          await hintFor(settle(t));
+          if (searches === before) continue; // that table was on the way too
+          const again = await hintFor(s); // back by Undo
+          assert.deepEqual(again, h, `${v} deal ${n}: a different hint after coming back`);
+          assert.equal(searches, before + 1, `${v} deal ${n}: Hint searched again after coming back`);
+          came++;
+          break;
+        }
+        s = play(s, h.move);
+      }
+      assert.equal(came, 3, `${v} deal ${n}: Hint wasn't taken off its way three times`);
+    } finally {
+      game.search = search;
+    }
+  }
+});
+
 // Deal 13,105 of two-suit Spider, 142 moves in, reached by a player who strayed from Hint and came back. Six runs
 // cleared, one row left to deal and five columns empty: the row can only be dealt once the sixteen cards left are
 // spread over all ten columns, which means splitting a run. Hint once lit the 8 of spades onto the 9 of hearts, then

@@ -102,13 +102,16 @@ export class Dealer {
   }
 }
 
-// The way through Hint found last: every table it passes through, as the page plays it, with the move to show there.
-// While the player does what Hint says (or comes back to a table on the way), the next move comes from here instead
-// of a new search. That's quicker, and it can't lead back where it came from: a new search from each table sometimes
-// did, a card up to its foundation and straight back down, round and round for good.
-// It's kept only for the setting it was found with: a way found with cards going up by themselves off can count on a
-// card waiting on the waste that, with the setting switched on, goes up by itself instead.
-let line = new Map(), lineAuto = true;
+// The last few ways through Hint found, the latest first: each is every table it passes through, as the page plays it,
+// with the move to show there (map), and the setting it was found with (auto). While the player does what Hint says,
+// or comes back to a table on one of them (by Undo, after asking Hint somewhere else on the way), the next move comes
+// from there instead of a new search. That's quicker, it's the same move as before, and it can't lead back where it
+// came from: a new search from each table sometimes did, a card up to its foundation and straight back down, round and
+// round for good. A way is used only with the setting it was found with: one found with cards going up by themselves
+// off can count on a card waiting on the waste that, with the setting switched on, goes up by itself instead.
+const WAYS = 3;
+let ways = [];
+const keep = (map, auto) => { ways = [{ map, auto }, ...ways].slice(0, WAYS); return map; };
 
 // The tables Hint has suggested a move at without a way through ("the move that looked best", below), while the player
 // does what it says, and the table its last such move leads to. Each new search from the next table can find a
@@ -154,8 +157,7 @@ function follow(game, s, path, auto) {
 // going up by themselves on, so it's kept only for that setting, like any other.
 export function primeLine(state, path) {
   const game = gameOf(state);
-  line = follow(game, settle(game, state, true), path, true);
-  lineAuto = true;
+  keep(follow(game, settle(game, state, true), path, true), true);
 }
 
 // What to suggest from here, with cards going up by themselves or not (the setting). Resolves with one of:
@@ -168,10 +170,12 @@ export async function hintFor(state, { auto = true } = {}) {
   const here = where(state);
   if (here !== circlingNext) circling = new Set();
   circlingNext = null;
-  const known = auto === lineAuto && line.get(here);
-  if (known) return { move: known };
-  line = new Map();
-  lineAuto = auto;
+  const i = ways.findIndex(w => w.auto === auto && w.map.has(here));
+  if (i >= 0) {
+    const [way] = ways.splice(i, 1);
+    ways.unshift(way); // the way being followed again
+    return { move: way.map.get(here) };
+  }
   // Drawing three with cards going up by themselves off, look first for a way with them on. That search is far smaller
   // (a card that could go up never waits on the waste), and a way it finds can be played with the setting off too: the
   // cards it sends up are moves of its own, made by hand. The search with the setting off often ran out of time and
@@ -191,7 +195,7 @@ export async function hintFor(state, { auto = true } = {}) {
   }
   if (search.result) circling = new Set();
   if (search.result === 'won') {
-    line = follow(game, state, search.path, auto);
+    const line = keep(follow(game, state, search.path, auto), auto);
     const m = search.path[0];
     return { move: line.get(where(state)) ?? (m ? game.fromSolver(state, m) : game.easyHint(state)) };
   }
