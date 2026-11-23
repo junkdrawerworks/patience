@@ -120,6 +120,23 @@ test('in Spider only a run of one suit moves together, onto any card one higher'
   assert.equal(spider.tapTarget(s, 't0', 1), 't3', 'its own suit first');
 });
 
+test('a Spider tap keeps a run of one suit together rather than move its top card onto another suit', () => {
+  // The 5 of spades on the 6 of spades, and a 6 of hearts elsewhere: a tap would split the spade run to put the 5 on
+  // a heart, so the cards shake instead. With another 6 of spades elsewhere, it goes there. Dragging still allows any.
+  const s = emptySp();
+  s.tab[0].up = [card(S, 8), card(S, 7), card(S, 6), card(S, 5)];
+  s.tab[1].up = [card(H, 6)];
+  s.tab[2].up = [card(H, 13)];
+  assert.equal(spider.tapTarget(s, 't0', 1), null, 'the 5 stays on its 6 of spades');
+  assert.equal(spider.tapTarget(s, 't0', 2), null, 'and the 6 and 5 on their 7');
+  assert.ok(spider.move(s, 't0', 1, 't1'), 'a drag can still put it on the 6 of hearts');
+  s.tab[3].up = [52 + card(S, 6)];
+  assert.equal(spider.tapTarget(s, 't0', 1), 't3', 'onto the other 6 of spades');
+  s.tab[0].up = [card(S, 8), card(S, 7), 52 + card(H, 6), card(S, 5)];
+  s.tab[3].up = [];
+  assert.equal(spider.tapTarget(s, 't0', 1), 't1', 'a 5 of spades on a 6 of hearts still moves to the other 6 of hearts');
+});
+
 test('a finished run of one suit clears away and turns over the card under it', () => {
   const s = emptySp();
   s.tab[0] = { down: [card(H, 5)], up: Array.from({ length: 12 }, (_, i) => card(S, 13 - i)) }; // king to 2

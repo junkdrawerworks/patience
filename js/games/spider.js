@@ -121,12 +121,16 @@ export const spider = {
   },
 
   // A tap sends a run onto a card one higher of its own suit if there is one, then any card one higher,
-  // then an empty column (unless the run is the whole column already).
+  // then an empty column (unless the run is the whole column already). A run already on a card one higher of its own
+  // suit goes only onto another like it: anywhere else would split a longer run, which is seldom what's wanted, so
+  // with nowhere like it the cards shake (a drag still puts them anywhere the rules allow).
   tapTarget(s, from, n) {
     const cards = spider.lift(s, from, s.tab[col(from)].up.length - n);
     if (!cards) return null;
     const base = cards[0], src = s.tab[col(from)];
     const whole = !src.down.length && src.up.length === n;
+    const under = src.up[src.up.length - n - 1];
+    const inRun = under !== undefined && follows(base, under);
     const start = col(from);
     const order = T.map((id, i) => ({ id, i, t: s.tab[i] }))
       .filter(x => x.id !== from && spider.canDrop(s, cards, x.id))
@@ -134,7 +138,7 @@ export const spider = {
         const empty = !x.t.up.length && !x.t.down.length;
         return { ...x, empty, rank: empty ? 2 : suitOf(top(x.t.up)) === suitOf(base) ? 0 : 1 };
       })
-      .filter(x => !(x.empty && whole));
+      .filter(x => !(x.empty && whole) && !(inRun && x.rank !== 0));
     order.sort((a, b) => a.rank - b.rank || ((a.i - start + 10) % 10) - ((b.i - start + 10) % 10));
     return order[0]?.id ?? null;
   },
