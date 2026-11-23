@@ -7,7 +7,7 @@
 
 import { suitOf, rankOf } from '../cards.js';
 import { shuffle } from '../rng.js';
-import { SpiderSearch, stuck } from '../solvers/spider.js';
+import { SpiderSearch, SpiderSure, stuck } from '../solvers/spider.js';
 
 const T = Array.from({ length: 10 }, (_, i) => 't' + i);
 const SUITS = { s1: [0], s2: [0, 1], s4: [0, 1, 2, 3] };
@@ -148,7 +148,7 @@ export const spider = {
     return { tab: s.tab.map(t => [...t.down, ...t.up]), down: s.tab.map(t => t.down.length), stock: s.stock.slice(), sets: s.sets.length };
   },
   search(s) { return new SpiderSearch(spider.position(s)); },
-  searchAll(s) { return new SpiderSearch(spider.position(s), { every: true }); },
+  searchAll(s) { return new SpiderSure(spider.position(s), { first: spider.budget.all / 2 }); },
 
   fromSolver(s, m) {
     if (m.deal) return { stock: true };
@@ -180,6 +180,7 @@ export const spider = {
   },
 
   randomDeal: () => 1 + Math.floor(Math.random() * 999999),
-  // Hint gets as long as a deal was checked for, so its first press on a new deal finds the way through.
-  budget: { deal: 120000, hint: 120000, all: 20000 },
+  // Hint gets as long as a deal was checked for, so its first press on a new deal finds the way through. Making sure
+  // there's no way to win, the first half of `all` goes to the quick moves with spreading, the rest to every move.
+  budget: { deal: 120000, hint: 120000, all: 40000 },
 };

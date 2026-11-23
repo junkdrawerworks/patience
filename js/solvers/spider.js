@@ -119,6 +119,33 @@ const everyMove = {
   },
 };
 
+// The quick moves, and while a row is waiting to be dealt with a column empty, the top card of a column into it too.
+// The row can't come until every column has a card, and with few cards left on the table that can mean splitting a
+// run, which the quick moves never do. Tried only once the quick moves have found no way through: offered all along,
+// they change which way the search goes first, and some deals it wins quickly it no longer wins in time.
+const spreading = {
+  ...rules,
+  moves(s) {
+    const out = rules.moves(s), { tab, down } = s;
+    if (!s.stock.length) return out;
+    // Only once no column has a whole run with cards under it left to move into an empty one.
+    let empty = -1, empties = 0, under = 0;
+    for (let a = 0; a < 10; a++) {
+      const t = tab[a];
+      if (!t.length) { if (empty < 0) empty = a; empties++; continue; }
+      let i = t.length - 1;
+      while (i > down[a] && follows(t[i], t[i - 1])) i--;
+      if (i > 0) under++;
+    }
+    if (!empties || under) return out;
+    for (let a = 0; a < 10; a++) {
+      const t = tab[a], len = t.length;
+      if (len > 1 && follows(t[len - 1], t[len - 2]) && len - 2 >= down[a]) out.push({ a, i: len - 1, b: empty });
+    }
+    return out;
+  },
+};
+
 // Nothing to do but move cards back and forth: no move, or string of moves, turns a card over, clears a run or
 // empties a column. Tries every move, splitting runs too. Gives up and says no after `cap` positions.
 export function stuck(position, cap = 400) {
@@ -153,9 +180,60 @@ function clear(s, a) {
   if (s.down[a] && s.tab[a].length === s.down[a]) s.down[a]--;
 }
 
-// every: try every move (see everyMove), not just the ones that usually help.
+// every: try every move (see everyMove), not just the ones that usually help. spread: see spreading.
 export class SpiderSearch extends BestFirst {
-  constructor(position, { every = false } = {}) { super(every ? everyMove : rules, position, { weight: 0.2 }); }
+  constructor(position, { every = false, spread = false } = {}) {
+    super(every ? everyMove : spread ? spreading : rules, position, { weight: 0.2 });
+  }
+}
+
+// For making sure, once the quick search has found no way through: first the quick moves with spreading, for up to
+// `first` positions, which finds a way quickly when splitting a run to deal the last rows is what was missing; then
+// every move (see everyMove), which can say for sure there's no way through. Runs a slice at a time like the others.
+export class SpiderSure {
+  constructor(position, { first = 20000 } = {}) {
+    this.position = position;
+    this.first = first;
+    this.now = new SpiderSearch(position, { spread: true });
+    this.every = false;
+    this.done = 0; // positions the first search looked at, once it's over
+    this.nodes = 0;
+    this.result = null;
+    this.path = null;
+    this.adopt();
+  }
+
+  adopt() {
+    this.nodes = this.done + this.now.nodes;
+    if (this.now.result === 'won' || (this.every && this.now.result)) { this.result = this.now.result; this.path = this.now.path; }
+  }
+
+  step(budget) {
+    if (this.result) return this.result;
+    if (!this.every) {
+      const r = this.now.step(Math.max(0, Math.min(budget, this.first - this.now.nodes)));
+      if (r !== 'won' && (r === 'lost' || this.now.nodes >= this.first)) {
+        this.done = this.now.nodes;
+        this.now = new SpiderSearch(this.position, { every: true });
+        this.every = true;
+      }
+    } else {
+      this.now.step(budget);
+    }
+    this.adopt();
+    return this.result;
+  }
+
+  run(max) {
+    while (!this.result) {
+      if (this.nodes >= max) return 'unknown';
+      this.step(Math.min(5000, max - this.nodes));
+    }
+    return this.result;
+  }
+
+  firstMove() { return this.now.firstMove(); }
+  firstMoves() { return this.now.firstMoves(); }
 }
 
 export { rules as spiderRules };

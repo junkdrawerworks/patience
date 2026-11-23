@@ -24,7 +24,8 @@
 //   search(s, { auto })     a solver for this position (step(budget), result, path, firstMove()); auto says whether
 //                           cards go up by themselves, which Klondike drawing three needs to know (on unless false)
 //   searchAll(s, { auto })  if search(s) leaves moves out: a solver that tries every move, to make sure before Hint says
-//                           there's no way to win (Klondike, Spider)
+//                           there's no way to win (Klondike, Spider; Spider's first tries the quick moves and a few more)
+//   firstMoves() on either search: every first move, the most promising first, for when the best one leads back
 //   lostStands              if searchAll runs out too, the first search's "no way to win" stands (Klondike); otherwise
 //                           Hint suggests the move that looked best
 //   fromSolver(s, m)        a solver move as a table move: { from, n, to }, or { stock: true } (Klondike adds c, the card

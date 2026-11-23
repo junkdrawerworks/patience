@@ -75,6 +75,12 @@ export class Dealer {
 // card waiting on the waste that, with the setting switched on, goes up by itself instead.
 let line = new Map(), lineAuto = true;
 
+// The tables Hint has suggested a move at without a way through ("the move that looked best", below), while the player
+// does what it says, and the table its last such move leads to. Each new search from the next table can find a
+// different move looking best, and two of them can take a card back and forth for ever; so none may lead back to a
+// table on this list. It starts again when the player does something else.
+let circling = new Set(), circlingNext = null;
+
 // A table, the same however many moves it took to get there.
 const where = s => JSON.stringify(s, (k, x) => (k === 'moves' || k === 'fan' ? undefined : x));
 
@@ -115,7 +121,10 @@ function follow(game, s, path, auto) {
 //   { none: true }              nothing left to do at all
 export async function hintFor(state, { auto = true } = {}) {
   const game = gameOf(state);
-  const known = auto === lineAuto && line.get(where(state));
+  const here = where(state);
+  if (here !== circlingNext) circling = new Set();
+  circlingNext = null;
+  const known = auto === lineAuto && line.get(here);
   if (known) return { move: known };
   line = new Map();
   lineAuto = auto;
@@ -127,14 +136,26 @@ export async function hintFor(state, { auto = true } = {}) {
     const again = await think(game.searchAll(state, { auto }), game.budget.all);
     if (again.result || !game.lostStands) search = again;
   }
+  if (search.result) circling = new Set();
   if (search.result === 'won') {
     line = follow(game, state, search.path, auto);
     const m = search.path[0];
     return { move: line.get(where(state)) ?? (m ? game.fromSolver(state, m) : game.easyHint(state)) };
   }
   if (search.result === 'lost') return { lost: true };
-  // Ran out of time: suggest the move that looked best.
-  const m = search.firstMove();
-  if (m) return { move: game.fromSolver(state, m) };
-  return game.stock(state) ? { move: { stock: true } } : { none: true };
+  // Ran out of time: suggest the move that looked best, unless it leads back to a table this has already happened at.
+  // If every move does, it's going round in circles, and there's no way through to be found from here.
+  const first = search.firstMove();
+  if (!first) return game.stock(state) ? { move: { stock: true } } : { none: true };
+  circling.add(here);
+  for (const m of [first, ...search.firstMoves().filter(x => x !== first)]) {
+    const move = game.fromSolver(state, m);
+    const next = move && (move.stock ? game.stock(state) : game.move(state, move.from, move.n, move.to));
+    if (!next) continue;
+    const there = where(settle(game, next, auto));
+    if (circling.has(there)) continue;
+    circlingNext = there;
+    return { move };
+  }
+  return { lost: true };
 }

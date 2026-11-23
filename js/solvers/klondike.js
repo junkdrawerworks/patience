@@ -58,6 +58,12 @@ export class Search {
     return this.rootAutos[0] ? plain(this.rootAutos[0]) : this.rootMoves?.[0] ? plain(this.rootMoves[0]) : null;
   }
 
+  // Every move to begin with, in the order firstMove() would pick them.
+  firstMoves() {
+    if (this.path || this.rootAutos[0]) return [this.firstMove()].filter(Boolean);
+    return (this.rootMoves || []).map(plain);
+  }
+
   // Look at up to `budget` more positions. Returns the result, or null if there's more to look at.
   step(budget) {
     if (this.result) return this.result;

@@ -24,6 +24,7 @@ export class BestFirst {
     const { state, autos } = game.start(position);
     this.root = { state, parent: null, move: null, autos, g: 0 };
     this.best = null;   // the most promising position seen, for a hint when time runs out
+    this.firsts = new Map(); // each first move -> the best score seen down that way, for other hints than the best
     if (game.done(state)) { this.finish(this.root); return; }
     this.seen.add(game.key(state));
     this.heap.push(this.root, game.score(state));
@@ -41,10 +42,11 @@ export class BestFirst {
         if (this.seen.has(k)) continue;
         this.seen.add(k);
         this.nodes++;
-        const child = { state, parent: node, move: m, autos, g: node.g + 1 };
+        const child = { state, parent: node, move: m, autos, g: node.g + 1, first: node.first ?? m };
         if (g.done(state)) { this.finish(child); return this.result; }
         const score = g.score(state);
         if (!this.best || score < this.best.score) this.best = { node: child, score };
+        if (!(this.firsts.get(child.first) <= score)) this.firsts.set(child.first, score);
         this.heap.push(child, score + this.weight * child.g);
       }
     }
@@ -71,6 +73,12 @@ export class BestFirst {
     if (this.path) return this.path[0] ?? null;
     if (this.root.autos.length) return this.root.autos[0];
     return this.best ? pathTo(this.best.node)[0] ?? null : null;
+  }
+
+  // Every first move, the most promising first, for when the best one won't do.
+  firstMoves() {
+    if (this.path || this.root.autos.length) return [this.firstMove()].filter(Boolean);
+    return [...this.firsts].sort((a, b) => a[1] - b[1]).map(([m]) => m);
   }
 }
 

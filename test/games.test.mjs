@@ -307,6 +307,51 @@ test('while you do what Hint says, it keeps to the way it found instead of searc
   }
 });
 
+// Deal 13,105 of two-suit Spider, 142 moves in, reached by a player who strayed from Hint and came back. Six runs
+// cleared, one row left to deal and five columns empty: the row can only be dealt once the sixteen cards left are
+// spread over all ten columns, which means splitting a run. Hint once lit the 8 of spades onto the 9 of hearts, then
+// back onto the 9 of spades, for ever.
+// 9S | - | 5S 4S 3S | - | KS QS JS | - | 4H 3H 2H | - | - | KH QH JH TH 9H 8S; stock 7S AS 2S AH 6S TS 7H 8H 6H 5H
+const lastRow = () => ({"v":"s2","deal":13105,"tab":[{"down":[],"up":[8]},{"down":[],"up":[]},{"down":[],"up":[56,3,2]},{"down":[],"up":[]},{"down":[],"up":[64,167,114]},{"down":[],"up":[]},{"down":[],"up":[16,171,118]},{"down":[],"up":[]},{"down":[],"up":[]},{"down":[],"up":[25,180,179,126,73,163]}],"stock":[6,156,1,65,161,165,175,72,122,17],"sets":[[169,14,119,68,121,70,19,176,125,22,75,128,129],[0,105,158,55,4,5,58,59,60,113,62,115,168],[13,66,15,120,69,174,123,20,21,178,23,76,77],[117,170,67,172,173,18,71,124,177,74,127,24,181],[52,53,106,107,108,109,162,7,112,9,10,63,12],[104,157,54,159,160,57,110,111,164,61,166,11,116]],"moves":142});
+const table = t => JSON.stringify(t, (k, x) => (k === 'moves' ? undefined : x));
+
+test('Spider: Hint finds the way when the last row waits for every column to have a card', async () => {
+  let s = lastRow();
+  assert.equal(new Set([...s.tab.flatMap(t => t.up), ...s.stock, ...s.sets.flat()]).size, 104, 'every card once');
+  const seen = new Set();
+  for (let k = 0; k < 300 && !spider.won(s); k++) {
+    assert.ok(!seen.has(table(s)), `Hint led back to a table it had shown, press ${k + 1}`);
+    seen.add(table(s));
+    const h = await hintFor(s);
+    assert.ok(h.move, `Hint said ${JSON.stringify(h)} at press ${k + 1}`);
+    s = h.move.stock ? spider.stock(s) : spider.move(s, h.move.from, h.move.n, h.move.to);
+    assert.ok(s, 'the table took the move');
+  }
+  assert.ok(spider.won(s));
+});
+
+test('with no time to find a way through, Hint suggests the move that looked best, but never one leading back', async () => {
+  // Searching only 50 positions, every press ends in the move that looked best. A new search from each table can find
+  // a different move looking best, and from this table two of them once took a card back and forth. (Asked with the
+  // setting for cards going up by themselves off, which Spider doesn't use, so the way the test above found isn't kept to.)
+  const { hint, all } = spider.budget;
+  Object.assign(spider.budget, { hint: 50, all: 50 });
+  try {
+    let s = lastRow();
+    const seen = new Set();
+    for (let k = 0; k < 60 && !spider.won(s); k++) {
+      assert.ok(!seen.has(table(s)), `Hint led back to a table it had shown, press ${k + 1}`);
+      seen.add(table(s));
+      const h = await hintFor(s, { auto: false });
+      if (h.lost) break; // every move led back
+      assert.ok(h.move, `Hint said ${JSON.stringify(h)} at press ${k + 1}`);
+      s = h.move.stock ? spider.stock(s) : spider.move(s, h.move.from, h.move.n, h.move.to);
+    }
+  } finally {
+    Object.assign(spider.budget, { hint, all });
+  }
+});
+
 test('Hint keeps to the way it found only with the setting it found it with', async () => {
   // Drawing three, deal 7016, following Hint with cards going up by themselves off and switching them on after 22
   // presses. Kept to after that, the way found with the setting off ended in "no way to win" 27 presses later.
