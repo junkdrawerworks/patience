@@ -36,7 +36,6 @@ const index = await read('index.html');
 if (!index.includes(home)) throw new Error(`build: expected to find ${JSON.stringify(home)} in the page`);
 const html = index
   .replace(home, '')
-  .replace(/ *<script src="carry\.js"><\/script>\n/, '') // only needed at the game's own address
   .replace(/ *<link rel="(manifest|apple-touch-icon|preload)"[^>]*>\n/g, '')
   .replaceAll('"icon.svg"', () => `"${icon}"`)
   .replace('<link rel="stylesheet" href="css/app.css">', () => `<style>\n${css}</style>`)

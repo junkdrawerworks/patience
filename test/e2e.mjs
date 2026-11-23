@@ -2802,6 +2802,30 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.equal(sw.match(/const FILES = '([0-9a-f]*)'/)?.[1], files, `a file sw.js keeps for offline has changed: set FILES in sw.js to '${files}'`);
 }
 
+// At its own address, the first visit deals straight away: nothing stops the page to fetch saves from anywhere else
+// first, and the page asks for nothing from another address.
+{
+  const own = 'https://patience.junkdrawer.works/';
+  const cx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const elsewhere = [];
+  await cx.route('**/*', async route => {
+    const url = route.request().url();
+    if (!url.startsWith(own)) { elsewhere.push(url); return route.abort(); }
+    const path = new URL(url).pathname;
+    let body;
+    try { body = await readFile(join(root, path === '/' ? 'index.html' : path)); } catch { return route.fulfill({ status: 404 }); }
+    return route.fulfill({ status: 200, contentType: TYPES[extname(path)] || 'text/html', body });
+  });
+  const px = await cx.newPage();
+  let loads = 0;
+  px.on('load', () => loads++);
+  await px.goto(own);
+  await px.waitForFunction(() => window.patience?.state, null, { timeout: 4000 });
+  assert.equal(loads, 1, 'the page loaded once, not stopped and loaded again');
+  assert.deepEqual(elsewhere, [], 'asked another address for something');
+  await cx.close();
+}
+
 // The one-file copy (npm run build) plays by itself, opened straight from the disk: no errors, and no file asked for
 // beyond itself.
 {

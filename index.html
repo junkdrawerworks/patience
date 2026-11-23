@@ -7,7 +7,6 @@
     // Look in the menu set to Light or Dark, before anything is drawn, so the page doesn't open in the phone's look first.
     try { const look = JSON.parse(localStorage.getItem('patience.v1')).settings.look; if (look === 'light' || look === 'dark') document.documentElement.dataset.theme = look; } catch { /* none saved */ }
   </script>
-  <script src="carry.js"></script>
   <title>Patience</title>
   <meta name="description" content="Klondike, FreeCell and Spider solitaire with no ads and no account. Tap or drag, undo as much as you like, and only get deals that can be won. Works offline.">
   <meta property="og:title" content="Patience">
