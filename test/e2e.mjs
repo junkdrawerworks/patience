@@ -502,6 +502,34 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   }
   assert.equal(await p4.evaluate(() => document.documentElement.hasAttribute('data-four')), true, 'settings kept');
   assert.equal(await p4.evaluate(() => window.patience.stats.fc.played), 3, 'record kept');
+  // A game that can be played, with a damaged Undo history: the game comes back, and Undo stops where the damage is.
+  const { klondike } = await import('../js/games/klondike.js');
+  const deal3 = klondike.deal(3, 'k1'), drawn = { ...klondike.stock(deal3), moves: 1 }; // deal 3: nothing goes up by itself
+  for (const history of [[{}], [{ v: 'k1' }], [deal3, { ...deal3, deal: 6 }], [deal3, { ...deal3, tab: 'x' }], [{ ...deal3, moves: -1 }]]) {
+    const value = JSON.stringify({ game: { state: drawn, history, elapsed: -65000, counted: true } });
+    await p4.evaluate(v => sessionStorage.setItem('seed', v), value);
+    await p4.reload();
+    await p4.waitForFunction(() => window.patience?.state, null, { timeout: 20000 });
+    assert.deepEqual(await p4.evaluate(() => window.patience.state), drawn, value);
+    assert.equal(await p4.textContent('#time'), '0:00', 'no time below nothing');
+    assert.equal(await p4.isDisabled('#b-undo'), true, value);
+    await p4.keyboard.press('z');
+    await p4.click('.spot[data-pile="stock"]', { force: true });
+    await p4.waitForFunction(() => window.patience.state.moves === 2, null, { timeout: 5000 });
+  }
+  // A sound history entry before the damaged one is dropped too, and Undo goes back only through the sound ones.
+  await p4.evaluate(v => sessionStorage.setItem('seed', v), JSON.stringify({ game: { state: drawn, history: [{}, deal3], counted: true } }));
+  await p4.reload();
+  await p4.waitForFunction(() => window.patience?.state, null, { timeout: 20000 });
+  await p4.keyboard.press('z');
+  await p4.waitForFunction(() => window.patience.state.moves === 0, null, { timeout: 5000 });
+  assert.equal(await p4.isDisabled('#b-undo'), true, 'Undo stops at the damage');
+  // Settings and a record the page never writes come back as it would write them.
+  await p4.evaluate(v => sessionStorage.setItem('seed', v), '{"settings":{"auto":"no","left":"x","clock":0},"stats":{"k1":{"played":2.5,"won":-3,"streak":1,"fastest":-1}}}');
+  await p4.reload();
+  await p4.waitForFunction(() => window.patience?.state, null, { timeout: 20000 });
+  assert.deepEqual(await p4.evaluate(() => [window.patience.settings.auto, window.patience.settings.left, window.patience.settings.clock]), [true, false, true]);
+  assert.deepEqual(await p4.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 1, best: 0, fastest: 0 });
   assert.deepEqual(errors, [], 'errors starting from a damaged save');
   await c4.close();
 }

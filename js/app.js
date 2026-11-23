@@ -13,15 +13,19 @@ const $ = id => document.getElementById(id);
 const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four: false, left: false };
 const blank = () => ({ played: 0, won: 0, streak: 0, best: 0, fastest: 0 });
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
+const shapes = {}; // a new deal of each way of playing, for the shape of a saved game (see sound())
 
 const upgrade = s => (s && !s.v && s.draw ? { ...s, v: 'k' + s.draw } : s);
 const settingsOf = saved => {
-  const s = { ...DEFAULTS, ...saved };
-  delete s.draw;
+  const s = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) => [k, typeof saved?.[k] === typeof d ? saved[k] : d]));
   if (!Object.keys(VARIANTS).includes(s.variant)) s.variant = 'k1';
   return s;
 };
-const record = r => Object.fromEntries(Object.entries(blank()).map(([k, zero]) => [k, Number.isFinite(r?.[k]) ? r[k] : zero]));
+// Counts are whole numbers, and the fastest win a time; none of them below nothing.
+const record = r => Object.fromEntries(Object.entries(blank()).map(([k, zero]) => {
+  const x = r?.[k];
+  return [k, Number.isFinite(x) && x >= 0 && (k === 'fastest' || Number.isInteger(x)) ? x : zero];
+}));
 // The deal kept ready for each way of playing, by draw count in the first version.
 const readyOf = next => {
   const kept = { k1: next?.[1], k3: next?.[3], ...next };
@@ -356,7 +360,7 @@ function read(text) {
   // The first version only played Klondike, and kept the draw count where the way of playing now goes.
   if (s.settings && !s.settings.variant && s.settings.draw) s.settings.variant = 'k' + s.settings.draw;
   if (s.stats?.[1] || s.stats?.[3]) { s.stats.k1 ??= s.stats[1]; s.stats.k3 ??= s.stats[3]; }
-  if (s.game) { s.game.state = upgrade(s.game.state); s.game.history = (Array.isArray(s.game.history) ? s.game.history : []).filter(isObj).map(upgrade); }
+  if (s.game) { s.game.state = upgrade(s.game.state); s.game.history = (Array.isArray(s.game.history) ? s.game.history : []).map(upgrade); }
   return s;
 }
 
@@ -536,13 +540,36 @@ if ('serviceWorker' in navigator && !('single' in document.documentElement.datas
 apply();
 if (!resume(saved.game)) newGame(settings.variant);
 
-// A saved game, if it's one that can be played: { state, history, elapsed, counted }, or null.
+// A saved game, if it's one that can be played: { state, history, elapsed, counted }, or null. Undo goes back as far
+// as the history is sound: a damaged entry, and every one before it, is left out.
 function playable(g) {
   const s = g?.state;
   try {
-    if (!isObj(s) || !Object.hasOwn(VARIANTS, s.v) || gameOf(s).won(s)) return null;
+    if (!sound(s) || gameOf(s).won(s)) return null;
   } catch { return null; }
-  return { state: s, history: g.history, elapsed: Number.isFinite(g.elapsed) ? g.elapsed : 0, counted: !!g.counted };
+  const h = Array.isArray(g.history) ? g.history : [];
+  let i = h.length;
+  while (i > 0 && sound(h[i - 1], s)) i--;
+  return { state: s, history: h.slice(i), elapsed: Number.isFinite(g.elapsed) ? Math.max(0, g.elapsed) : 0, counted: !!g.counted };
+}
+
+// Whether a saved state has the shape a new deal of its game has, enough to play from: the same piles, each a list
+// (the columns, foundations and free cells as many as a deal has), the same draw, and a count of moves. With `of`, it
+// must also be from the same game, as an Undo history entry is.
+function sound(s, of) {
+  if (!isObj(s) || !Object.hasOwn(VARIANTS, s.v) || (of && (s.v !== of.v || s.deal !== of.deal))) return false;
+  const like = (shapes[s.v] ??= VARIANTS[s.v].game.deal(1, s.v));
+  return Object.entries(like).every(([k, x]) => {
+    const y = s[k];
+    if (k === 'v') return true;
+    if (k === 'draw') return y === x;
+    if (typeof x === 'number') return Number.isInteger(y) && y >= 0;
+    if (!Array.isArray(y)) return false;
+    if (k === 'stock' || k === 'waste' || k === 'sets') return true;
+    if (y.length !== x.length) return false;
+    if (k === 'cells') return true;
+    return y.every(p => (Array.isArray(x[0]) ? Array.isArray(p) : isObj(p) && Array.isArray(p.down) && Array.isArray(p.up)));
+  });
 }
 
 // Put a saved game on the table, as it was.
