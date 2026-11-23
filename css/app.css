@@ -174,7 +174,10 @@ button { font: inherit; color: inherit; }
   cursor: pointer;
   touch-action: manipulation;
 }
-.bar button:hover { background: var(--bar); }
+/* Only where there's a pointer to hover: a phone keeps :hover on the last thing tapped, so a button would stay shaded. */
+@media (hover: hover) {
+  .bar button:hover { background: var(--bar); }
+}
 .bar button:active { background: rgba(0, 0, 0, 0.32); }
 .bar button:focus-visible { outline: 2px solid var(--glow); outline-offset: -2px; }
 .bar button:disabled { opacity: 0.42; cursor: default; background: transparent; }
@@ -416,7 +419,9 @@ button { font: inherit; color: inherit; }
   color: var(--muted);
   cursor: pointer;
 }
-.close:hover { background: var(--line); }
+@media (hover: hover) {
+  .close:hover { background: var(--line); }
+}
 .note { margin: -4px 0 12px; color: var(--muted); font-size: 14.5px; }
 
 .games { display: grid; gap: 18px; }
@@ -434,7 +439,9 @@ button { font: inherit; color: inherit; }
   font-weight: 650;
   cursor: pointer;
 }
-.choice:hover { border-color: var(--accent); }
+@media (hover: hover) {
+  .choice:hover { border-color: var(--accent); }
+}
 .choice.current { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
 .plain {
   display: block;
@@ -448,7 +455,9 @@ button { font: inherit; color: inherit; }
   font-weight: 650;
   cursor: pointer;
 }
-.plain:hover { background: var(--line); }
+@media (hover: hover) {
+  .plain:hover { background: var(--line); }
+}
 .primary {
   display: block;
   width: 100%;
@@ -534,7 +543,10 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
   color: var(--muted);
 }
 .jd-foot a { color: var(--muted); text-decoration: none; }
-.jd-foot a:hover, .jd-foot a:focus-visible { text-decoration: underline; }
+.jd-foot a:focus-visible { text-decoration: underline; }
+@media (hover: hover) {
+  .jd-foot a:hover { text-decoration: underline; }
+}
 
 /* ---- winning ---- */
 
