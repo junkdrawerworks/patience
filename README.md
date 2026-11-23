@@ -32,7 +32,7 @@
 - **Your record** for each of the six ways of playing: games played, won, win rate, streak, best streak and fastest win.
 - **Settings:** only deal games that can be won, send cards up by themselves, show the time and moves, four-colour suits (clubs green, diamonds blue), the deck on the left instead of under your right thumb, and the look: light or dark, or whatever your phone is set to.
 - **On a keyboard,** Space uses the deck in Klondike and Spider, Z undoes, H gives a hint, Enter plays it and N opens New game (Enter there deals another of the same).
-- No ads, no account and no server. Your game, your record and your settings stay in your browser. It works offline and installs to a phone's home screen.
+- No ads, no account and no server. Your game, your record and your settings stay in your browser. It works offline and installs to a phone's home screen. On an iPhone, installing it keeps your record safest: Safari clears what a site has saved after seven days of using Safari without opening it, and an app on the home screen keeps its own count.
 
 ## Running it
 

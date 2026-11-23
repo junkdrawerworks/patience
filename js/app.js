@@ -867,6 +867,12 @@ if ('serviceWorker' in navigator && !('single' in document.documentElement.datas
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+// Installed on a home screen, it asks the browser to keep the save for good, not clear it to make room (Chrome agrees
+// without a word to an installed app). Not in a browser tab, where Firefox would ask the player about it.
+if ((matchMedia('(display-mode: standalone)').matches || navigator.standalone === true) && navigator.storage?.persist) {
+  navigator.storage.persisted().then(yes => yes || navigator.storage.persist()).catch(() => {});
+}
+
 // ---- starting up: carry on with the saved game, or deal a new one ----
 
 apply();

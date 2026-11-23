@@ -2826,6 +2826,24 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cx.close();
 }
 
+// Installed on a home screen, it asks the browser to keep its storage for good; in a browser tab it doesn't ask.
+for (const installed of [true, false]) {
+  const cx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  await cx.addInitScript(installed => {
+    window.asked = 0;
+    const own = window.matchMedia.bind(window);
+    if (installed) window.matchMedia = q => (q === '(display-mode: standalone)' ? { ...own(q), matches: true, media: q } : own(q));
+    navigator.storage.persisted = async () => false;
+    navigator.storage.persist = async () => { window.asked++; return true; };
+  }, installed);
+  const px = await cx.newPage();
+  await px.goto(base);
+  await px.waitForFunction(() => window.patience?.state, null, { timeout: 15000 });
+  await px.waitForTimeout(300);
+  assert.equal(await px.evaluate(() => window.asked), installed ? 1 : 0, installed ? 'installed, it asks to keep its storage' : 'in a tab, it doesn\'t ask');
+  await cx.close();
+}
+
 // The one-file copy (npm run build) plays by itself, opened straight from the disk: no errors, and no file asked for
 // beyond itself.
 {
