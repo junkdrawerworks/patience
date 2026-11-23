@@ -361,6 +361,10 @@ export class Table {
 
     if (kind === 'stock' || kind === 'deals') { this.on.stock(); return; }
     if (kind === 'sets') return;
+    // Where Hint says a card goes is lit up as well as the card, and a tap on either plays the move: here, on an empty
+    // column, free cell or foundation, where there's nothing to pick up (a lit card is in up(), below).
+    const h = this.shown, hinted = h && !h.stock && pile === h.to;
+    if (hinted && !this.game.pile(s, pile).up.length) { this.on.move(h.from, h.n, h.to); return; }
     if (kind === 'column') {
       // A card still arriving on this column takes no press itself (see fly()), but a press where it's landing is for it.
       const up = this.game.pile(s, pile).up, r = this.el.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
@@ -373,6 +377,8 @@ export class Table {
     if (index < 0) return;
     const cards = this.game.lift(s, pile, index);
     if (!cards) {
+      // The lit card on a FreeCell foundation, which stays there.
+      if (hinted && index === this.game.pile(s, pile).up.length - 1) { this.on.move(h.from, h.n, h.to); return; }
       // A face-up card that can't come up with the cards on top of it.
       if (cardEl) this.shakeCards([+cardEl.dataset.c]);
       return;
@@ -445,9 +451,11 @@ export class Table {
     const still = this.holds(d, this.state);
     if (!d.moved) {
       if (cancelled || !still) return;
-      // A tap on the card Hint lit up plays Hint's move, wherever a tap would otherwise send it.
+      // A tap on either card Hint lit up, the one to move or the top card where it goes, plays Hint's move, wherever a
+      // tap would otherwise send it.
       const h = this.shown;
       if (h && !h.stock && d.pile === h.from && d.n === h.n) this.on.move(d.pile, d.n, h.to);
+      else if (h && !h.stock && d.pile === h.to && d.n === 1) this.on.move(h.from, h.n, h.to);
       else this.on.tap(d.pile, d.n);
       return;
     }

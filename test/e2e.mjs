@@ -893,6 +893,71 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ct.close();
 }
 
+// Hint lights up a card and where it goes, and a tap on either plays the move: where it goes may be the top card of a
+// column (which a tap alone would send somewhere else), a card on a foundation, or an empty free cell, foundation or
+// column. FreeCell game 617 and Klondike deal 11,705 drawing one, Hint followed with cards going up by themselves off.
+{
+  const ct = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const pt = await ct.newPage();
+  const errors = [];
+  pt.on('pageerror', e => errors.push(e.message));
+  const ready = () => pt.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = () => pt.evaluate(() => window.patience.state);
+  const litSpots = () => pt.evaluate(() => [...document.querySelectorAll('.spot.hint')].map(el => el.dataset.pile));
+  const litCards = () => pt.evaluate(() => [...document.querySelectorAll('.card.hint')].map(el => +el.dataset.c).sort((a, b) => a - b));
+  const tapAt = async sel => { const b = await pt.locator(sel).boundingBox(); await pt.touchscreen.tap(b.x + b.width / 2, b.y + 10); };
+  const hintOn = async s => {
+    await pt.evaluate(t => window.patience.load(t), s);
+    await ready();
+    await pt.tap('#b-hint');
+    await pt.waitForSelector('.hint', { timeout: 20000 });
+  };
+  await pt.goto(base);
+  await ready();
+  await pt.evaluate(() => { window.patience.settings.auto = false; });
+  const fc = (tab, cells, found, moves) => ({ v: 'fc', deal: 617, tab, cells, found, moves });
+  // The queen of hearts onto the king of clubs: tap the king, which a tap alone would send somewhere itself.
+  await hintOn(fc([[45, 48, 22, 51, 29, 3, 49], [39, 6, 37, 17, 11, 9, 12], [30, 50, 15, 8, 34, 14, 38], [2, 26, 47, 28, 21, 43, 16], [4, 44, 5, 7, 32, 36], [33, 20, 46, 19, 18, 31], [40, 0, 41, 42, 27, 23], [13, 25, 35, 10, 1, 24]], [null, null, null, null], [[], [], [], []], 0));
+  assert.deepEqual(await litCards(), [24, 38], 'Hint lit the queen of hearts and the king of clubs');
+  await tapAt('.card[data-c="38"]');
+  await ready();
+  assert.equal((await now()).tab[2].at(-1), 24, 'a tap on the king of clubs put the queen of hearts on it');
+  // The king of spades into the first free cell, empty: tap the free cell.
+  await hintOn(fc([[45, 48, 22, 51, 29, 3, 49], [39, 6, 37, 17, 11, 9, 12], [30, 50, 15, 8, 34, 14, 38, 24], [2, 26, 47, 28, 21, 43, 16], [4, 44, 5, 7, 32, 36], [33, 20, 46, 19, 18, 31], [40, 0, 41, 42, 27, 23], [13, 25, 35, 10, 1]], [null, null, null, null], [[], [], [], []], 1));
+  assert.deepEqual(await litSpots(), ['c0'], 'the empty free cell lights up');
+  await tapAt('.spot[data-pile="c0"]');
+  await ready();
+  assert.equal((await now()).cells[0], 12, 'a tap on it put the card there');
+  // The ace of hearts up to an empty foundation: tap the foundation.
+  const tab11 = [[45, 48, 22, 51, 29, 3, 49, 9], [39, 6, 37, 23, 35], [30, 50, 15, 8, 34, 14, 38, 24, 10], [2, 26, 47, 28, 21, 43, 16], [4, 44, 5, 7, 32, 36], [33, 20, 46, 19, 18, 31, 17], [40, 0, 41, 42, 27]];
+  await hintOn(fc([...tab11, [13]], [12, 11, 25, 1], [[], [], [], []], 11));
+  assert.deepEqual(await litSpots(), ['f0'], 'the empty foundation lights up');
+  await tapAt('.spot[data-pile="f0"]');
+  await ready();
+  assert.deepEqual((await now()).found[0], [13], 'a tap on it sent the ace up');
+  // The king of hearts from a free cell to an empty column: tap the column.
+  await hintOn(fc([...tab11, []], [12, 11, 25, 1], [[13], [], [], []], 12));
+  assert.deepEqual(await litSpots(), ['t7'], 'the empty column lights up');
+  await tapAt('.spot[data-pile="t7"]');
+  await ready();
+  assert.deepEqual((await now()).tab[7], [25], 'a tap on it moved the card there');
+  // The 2 of spades up onto the ace on its foundation, which stays where it is in FreeCell: tap the ace.
+  await hintOn(fc([[45, 48, 22, 51, 29, 41, 27], [39, 6, 37, 23, 35], [30, 50, 15, 8, 34, 14, 38, 24, 10], [2, 26, 47, 28, 21, 43, 16], [4, 44, 5, 7, 32, 36], [33, 20, 46, 19, 18, 31, 17, 3], [40], [25, 11, 49, 9]], [12, 42, null, 1], [[13], [0], [], []], 21));
+  assert.deepEqual(await litCards(), [0, 1], 'Hint lit the 2 of spades and the ace on the foundation');
+  await tapAt('.card[data-c="0"]');
+  await ready();
+  assert.deepEqual((await now()).found[1], [0, 1], 'a tap on the ace sent the 2 up onto it');
+  // In Klondike a card on a foundation can come back down, and a tap on the lit one still plays Hint's move.
+  await hintOn({ v: 'k1', deal: 11705, draw: 1, stock: [47, 42, 41, 22, 50, 17], waste: [6, 30, 29, 10, 5, 7, 12, 9, 31, 46, 23, 40, 3, 28, 37, 49], fan: 1, found: [[13], [0], [], []],
+    tab: [[[], [51]], [[38], [25]], [[34, 14], [1]], [[32, 21, 43], [20]], [[11, 48, 4, 33], [24]], [[39, 44, 8, 19, 26], [18]], [[27, 15, 2, 45, 35, 36], [16]]].map(([down, up]) => ({ down, up })), moves: 20 });
+  assert.deepEqual(await litCards(), [0, 1], 'Hint lit the 2 of spades and the ace on the foundation');
+  await tapAt('.card[data-c="0"]');
+  await ready();
+  assert.deepEqual((await now()).found[1], [0, 1], 'a tap on the ace sent the 2 up onto it');
+  assert.deepEqual(errors, [], 'errors tapping where Hint said a card goes');
+  await ct.close();
+}
+
 // A second press of Hint while it's still thinking about the first isn't lost when the cards move in between: it
 // answers for the table as it is then. Four-suit Spider deal 35 takes the solver about 100,000 positions.
 {
