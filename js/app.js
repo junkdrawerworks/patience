@@ -557,13 +557,22 @@ function toast(text, actions = [], ms = actions.length ? 9000 : 4000) {
   const t = $('toast');
   noting = false;
   drawingFor = null;
-  t.textContent = text;
-  for (const [name, fn] of actions) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = name;
-    b.addEventListener('click', () => { hideToast(); fn(); });
-    t.append(b);
+  t.textContent = '';
+  const words = document.createElement('span');
+  words.textContent = text;
+  t.append(words);
+  // The buttons stay together, and go onto a line of their own together when there isn't room beside the words.
+  if (actions.length) {
+    const acts = document.createElement('span');
+    acts.className = 'acts';
+    for (const [name, fn] of actions) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = name;
+      b.addEventListener('click', () => { hideToast(); fn(); });
+      acts.append(b);
+    }
+    t.append(acts);
   }
   t.hidden = false;
   clearTimeout(toastTimer);
