@@ -38,16 +38,40 @@ export async function deadEnd(state, { auto = true } = {}, { wait, stale } = {})
   return look;
 }
 
+const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
+
 // Keeps a winnable deal ready for the way you're playing, so New game doesn't have to wait.
-// busy(): whether the page is busy (a card being dragged, cards being dealt, Hint thinking), so a deal being found in
-// the background should wait. One a new game is waiting for doesn't.
+// `kept` is what the save keeps for it (see kept()). busy(): whether the page is busy (a card being dragged, cards
+// being dealt, Hint thinking), so a deal being found in the background should wait. One a new game is waiting for doesn't.
 export class Dealer {
-  constructor(ready, onReady, busy) {
-    this.ready = { ...ready }; // way of playing -> deal number
+  constructor(kept, onReady, busy) {
     this.jobs = {};
     this.onReady = onReady;
     this.busy = busy;
-    this.ways = new Map(); // 'v:deal' -> the way through the solver found, for Hint (see pathFor); not saved
+    this.ways = new Map(); // 'v:deal' -> the way through the solver found, for Hint (see pathFor)
+    this.load(kept);
+  }
+
+  // What the save keeps: the deal ready for each way of playing (k1: 123456, ...), and in `ways` the way through each,
+  // so Hint's first press on it needn't search again after the page is closed and opened.
+  kept() {
+    const ways = {};
+    for (const [v, n] of Object.entries(this.ready)) {
+      const path = this.ways.get(v + ':' + n);
+      if (path) ways[v] = path;
+    }
+    return { ...this.ready, ways };
+  }
+
+  // Take up what the save kept (this page's, or another tab's), leaving out anything of the wrong shape. The first
+  // version kept the deal by draw count.
+  load(next) {
+    const kept = { k1: next?.[1], k3: next?.[3], ...next };
+    this.ready = Object.fromEntries(Object.keys(VARIANTS).filter(v => Number.isInteger(kept[v]) && kept[v] > 0).map(v => [v, kept[v]]));
+    for (const [v, n] of Object.entries(this.ready)) {
+      const path = isObj(kept.ways) && kept.ways[v];
+      if (Array.isArray(path) && path.every(isObj)) this.ways.set(v + ':' + n, path);
+    }
   }
 
   // The way through a deal this Dealer found, found with cards going up by themselves on, once: after that it's Hint's.
@@ -153,11 +177,14 @@ function follow(game, s, path, auto) {
 }
 
 // Start Hint off on a new deal with the way through found when the deal was checked, so its first press needn't search
-// again (which takes seconds for Spider on a slow phone). `state` is the deal as dealt; the way was found with cards
-// going up by themselves on, so it's kept only for that setting, like any other.
-export function primeLine(state, path) {
+// again (which takes seconds for Spider on a slow phone). `state` is the deal as dealt, and `auto` the setting for
+// cards going up by themselves. The way was found with it on, and plays with it off too: the cards it sends up are
+// moves of its own, made by hand.
+export function primeLine(state, path, auto = true) {
   const game = gameOf(state);
-  keep(follow(game, settle(game, state, true), path, true), true);
+  try {
+    keep(follow(game, settle(game, state, auto), path, auto), auto);
+  } catch { /* a way kept in the save that doesn't fit this deal (it never should): Hint searches instead */ }
 }
 
 // What to suggest from here, with cards going up by themselves or not (the setting). Resolves with one of:

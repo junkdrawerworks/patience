@@ -26,11 +26,6 @@ const record = r => Object.fromEntries(Object.entries(blank()).map(([k, zero]) =
   const x = r?.[k];
   return [k, Number.isFinite(x) && x >= 0 && (k === 'fastest' || Number.isInteger(x)) ? x : zero];
 }));
-// The deal kept ready for each way of playing, by draw count in the first version.
-const readyOf = next => {
-  const kept = { k1: next?.[1], k3: next?.[3], ...next };
-  return Object.fromEntries(Object.keys(VARIANTS).filter(v => Number.isInteger(kept[v]) && kept[v] > 0).map(v => [v, kept[v]]));
-};
 
 let lastWritten = stored(); // the save as this page last read or wrote it, to tell when another tab has saved since
 const saved = read(lastWritten);
@@ -74,7 +69,7 @@ const table = new Table($('table'), {
 // back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays as it was.
 // A Back meant to leave still leaves.
 guardEdges({ surfaces: [table.el] });
-const dealer = new Dealer(readyOf(saved.next), () => write(), () => !!table.drag || table.locked || thinking);
+const dealer = new Dealer(saved.next, () => write(), () => !!table.drag || table.locked || thinking);
 
 // ---- playing ----
 
@@ -217,9 +212,9 @@ function start(state, again) {
   if (again && counted) stopClock();
   else { elapsed = 0; since = 0; counted = false; }
   winCounted = false;
-  // A deal just checked comes with the way through, for Hint's first press (found with cards going up by themselves on).
+  // A deal just checked comes with the way through, for Hint's first press.
   const way = !again && dealer.pathFor(state.v, state.deal);
-  if (way && settings.auto) primeLine(state, way);
+  if (way) primeLine(state, way, settings.auto);
   table.render(game, { deal: true });
   showInfo();
   write();
@@ -406,7 +401,7 @@ function write() {
     // The whole undo list goes too, so Undo still goes all the way back after the page is closed. The last 2,000 moves
     // is more than a game takes, and keeps the save to about a megabyte even in Spider. A game won is left out.
     const g = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
-    const save = { settings, stats, next: dealer?.ready, game: g };
+    const save = { settings, stats, next: dealer?.kept(), game: g };
     let text = JSON.stringify(save);
     try {
       localStorage.setItem(KEY, text);
@@ -446,8 +441,7 @@ function adopt() {
   for (const v of Object.keys(VARIANTS)) Object.assign(stats[v], record(s.stats?.[v]));
   Object.assign(settings, settingsOf(s.settings));
   apply();
-  for (const v of Object.keys(dealer.ready)) delete dealer.ready[v];
-  Object.assign(dealer.ready, readyOf(s.next));
+  dealer.load(s.next);
   if (!$('sheet-menu').hidden) showStats($('stats-for').value);
   if (table.drag || (table.locked && $('won').hidden)) { adopting = setTimeout(adopt, 250); return; }
   lastWritten = text;

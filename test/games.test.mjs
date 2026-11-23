@@ -487,27 +487,32 @@ test('with no time to find a way through, Hint suggests the move that looked bes
 });
 
 test('on a deal just checked, Hint starts from the way through found then, without searching again', async () => {
-  // Deals the test above follows with one search, so they're known to be won by the first search's way.
-  for (const [v, deal] of [['k3', 2096], ['fc', 1003], ['s2', 1001]]) {
+  // Deals the test above follows with one search, so they're known to be won by the first search's way. The deal is
+  // kept ready in the save, with its way, and the page closed and opened again before it's dealt. With cards going up
+  // by themselves off, the way (found with them on) is followed with those cards sent up by hand.
+  for (const [v, deal, auto] of [['k3', 2096, true], ['k3', 2096, false], ['fc', 1003, true], ['fc', 1003, false], ['s2', 1001, true]]) {
     const game = VARIANTS[v].game, search = game.search, randomDeal = game.randomDeal;
     const dealer = new Dealer({});
     game.randomDeal = () => deal;
     const n = await dealer.find(v);
     game.randomDeal = randomDeal;
+    dealer.ready[v] = n;
+    const opened = new Dealer(JSON.parse(JSON.stringify(dealer.kept())));
+    assert.deepEqual(opened.ready, { [v]: n }, 'the deal kept ready');
     let searches = 0;
     game.search = (...args) => { searches++; return search(...args); };
     try {
-      primeLine(game.deal(n, v), dealer.pathFor(v, n));
-      assert.equal(dealer.pathFor(v, n), undefined, 'the way is handed over once');
-      const settle = s => { for (let st; !game.won(s) && !game.finishable(s) && (st = game.autoStep(s));) s = game.move(s, st.from, st.n, st.to); return s; };
+      primeLine(game.deal(n, v), opened.pathFor(v, n), auto);
+      assert.equal(opened.pathFor(v, n), undefined, 'the way is handed over once');
+      const settle = s => { for (let st; auto && !game.won(s) && !game.finishable(s) && (st = game.autoStep(s));) s = game.move(s, st.from, st.n, st.to); return s; };
       let s = settle(game.deal(n, v));
       for (let i = 0; i < 1000 && !game.won(s) && !game.finishable(s); i++) {
-        const h = await hintFor(s);
+        const h = await hintFor(s, { auto });
         assert.ok(h.move, `${v} deal ${n}: Hint said ${JSON.stringify(h)}`);
         s = settle(h.move.stock ? game.stock(s) : game.move(s, h.move.from, h.move.n, h.move.to));
       }
       assert.ok(game.won(s) || game.finishable(s), `${v} deal ${n} not won`);
-      assert.equal(searches, 0, `${v} deal ${n}: Hint searched`);
+      assert.equal(searches, 0, `${v} deal ${n}, cards going up by themselves ${auto ? 'on' : 'off'}: Hint searched`);
     } finally {
       game.search = search;
     }
