@@ -19,7 +19,7 @@
   --felt-edge: #1f5a42;
   --on-felt: #f4f0e3;
   --on-felt-muted: rgba(244, 240, 227, 0.88);
-  --slot: rgba(255, 255, 255, 0.2);
+  --slot: rgba(255, 255, 255, 0.3);
   --bar: rgba(10, 30, 22, 0.28);
   --card: #fcfaf4;
   --card-edge: rgba(40, 32, 20, 0.24);
@@ -48,7 +48,7 @@
     --felt-edge: #0f2a20;
     --on-felt: #e9e4d6;
     --on-felt-muted: rgba(233, 228, 214, 0.66);
-    --slot: rgba(255, 255, 255, 0.14);
+    --slot: rgba(255, 255, 255, 0.24);
     --bar: rgba(0, 0, 0, 0.26);
     --card: #e9e4d7;
     --card-edge: rgba(0, 0, 0, 0.4);
