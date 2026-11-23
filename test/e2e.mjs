@@ -937,6 +937,54 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await c13.close();
 }
 
+// A browser that isn't keeping the save (site data blocked): the player is told once, and the menu says so under the
+// record. With storage full, the save still goes, with the last 200 moves of the Undo history, and nothing is said.
+{
+  const c14 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const p14 = await c14.newPage();
+  const errors = [];
+  p14.on('pageerror', e => errors.push(e.message));
+  await p14.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('blocked', 'SecurityError'); }; });
+  const ready = () => p14.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await p14.goto(base);
+  await ready();
+  const told = 'This browser isn’t keeping your games, so your record won’t be here next time.';
+  assert.equal(await p14.textContent('#toast'), told);
+  assert.equal(await p14.isVisible('#toast'), true, 'the player is told');
+  await p14.evaluate(() => {
+    window.told = 0;
+    new MutationObserver(() => { if (!document.getElementById('toast').hidden && document.getElementById('toast').textContent.includes('keeping')) window.told++; })
+      .observe(document.getElementById('toast'), { attributes: true, childList: true });
+    document.getElementById('toast').hidden = true;
+  });
+  for (let i = 0; i < 3; i++) { await p14.click('.spot[data-pile="stock"]', { force: true }); await ready(); }
+  await p14.evaluate(() => window.patience.newGame('fc', 617));
+  await p14.waitForTimeout(1500);
+  await ready();
+  assert.equal(await p14.evaluate(() => window.told), 0, 'once is enough');
+  await p14.click('#b-menu');
+  assert.equal(await p14.isVisible('#unkept'), true, 'the menu says so under the record');
+  assert.deepEqual(errors, []);
+  await c14.close();
+
+  const c15 = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const p15 = await c15.newPage();
+  await p15.addInitScript(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (JSON.parse(v).game?.history.length > 200) throw new DOMException('full', 'QuotaExceededError');
+      return set.call(this, k, v);
+    };
+  });
+  await p15.goto(base);
+  await p15.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await p15.evaluate(() => { for (let i = 0; i < 250; i++) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd' })); });
+  const save = await p15.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).game);
+  assert.deepEqual([save.state.moves, save.history.length], [250, 200], 'the game saved, with the last 200 moves to undo');
+  assert.equal(await p15.isHidden('#toast'), true, 'and nothing to say');
+  await c15.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`

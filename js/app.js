@@ -365,14 +365,36 @@ function read(text) {
 }
 
 function write() {
+  let ok = false;
   try {
     // The whole undo list goes too, so Undo still goes all the way back after the page is closed. The last 2,000 moves
     // is more than a game takes, and keeps the save to about a megabyte even in Spider. A game won is left out.
     const g = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
-    const text = JSON.stringify({ settings, stats, next: dealer?.ready, game: g });
-    localStorage.setItem(KEY, text);
+    const save = { settings, stats, next: dealer?.ready, game: g };
+    let text = JSON.stringify(save);
+    try {
+      localStorage.setItem(KEY, text);
+    } catch (e) {
+      // With the browser's storage full, the record and the game still go, with less of the Undo history.
+      if (!g || g.history.length <= 200) throw e;
+      g.history = g.history.slice(-200);
+      text = JSON.stringify(save);
+      localStorage.setItem(KEY, text);
+    }
     lastWritten = text;
+    ok = true;
   } catch { /* storage full or blocked */ }
+  kept(ok);
+}
+
+// Whether the browser is keeping the save. When it stops (site data blocked, or storage full), the player hears so
+// once, and the menu says so under the record for as long as it lasts.
+let unkept = false, told = false;
+function kept(ok) {
+  if (unkept === !ok) return;
+  unkept = !ok;
+  $('unkept').hidden = ok;
+  if (unkept && !told) { told = true; toast('This browser isn’t keeping your games, so your record won’t be here next time.'); }
 }
 
 // Another tab, or the installed app beside a browser tab, shares this save. When it saves, this page takes up what it

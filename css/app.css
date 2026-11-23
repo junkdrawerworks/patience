@@ -487,6 +487,7 @@ button { font: inherit; color: inherit; }
 .stats div { padding: 10px 8px; border-radius: 12px; background: var(--line); text-align: center; }
 .stats dt { font-size: 12px; color: var(--muted); }
 .stats dd { margin: 2px 0 0; font: 600 21px/1.2 var(--serif); font-variant-numeric: tabular-nums; }
+.stats + .note { margin: 10px 0 0; }
 
 .toggle { display: flex; gap: 12px; align-items: flex-start; padding: 9px 0; font-size: 14.5px; line-height: 1.4; color: var(--muted); cursor: pointer; }
 .toggle b { display: block; color: var(--ink); font-weight: 600; font-size: 15.5px; }
