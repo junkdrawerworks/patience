@@ -33,6 +33,10 @@ for (const sel of [':root', ':root[data-four]']) {
   css = css.replace(block[0], `@media (prefers-color-scheme: dark) {\n  ${guarded} {${block[1]}}\n}\n${forced} {${block[1]}}`);
 }
 for (const [, file] of css.matchAll(/url\(\.\.\/(fonts\/[^)]+\.woff2)\)/g)) css = css.replace(`url(../${file})`, `url(${await dataUri(file, 'font/woff2')})`);
+// The fonts' licence asks for it to go wherever they go, and here they go inside the page.
+const ofl = (await read('fonts/OFL.txt')).trim();
+if (ofl.includes('*/')) throw new Error('fonts/OFL.txt would end the comment it goes in');
+css = `/* The fonts in this page, Fraunces and Figtree, come with this licence:\n\n${ofl}\n*/\n${css}`;
 const icon = await dataUri('icon.svg', 'image/svg+xml');
 const html = (await read('index.html'))
   .replace(/ *<script src="carry\.js"><\/script>\n/, '') // only needed at the game's own address

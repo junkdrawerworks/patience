@@ -68,7 +68,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `js/app.js`: the game itself: undo, the clock, the record, settings and saving.
 - `js/cards.js`, `js/suits.js`, `js/rng.js`: the cards, the four suit shapes, the seeded shuffle that turns a deal number into a deal, and Windows' FreeCell shuffle.
 - `carry.js`: brings your game and record over from the old address, junkdrawer.works/patience/, the first time you open it here, and does nothing anywhere else.
-- `fonts/`: Fraunces and Figtree (SIL Open Font License), served from here so nothing loads from elsewhere.
+- `fonts/`: Fraunces and Figtree, served from here so nothing loads from elsewhere. They're under the SIL Open Font License, which comes with them in `OFL.txt`.
 - `sw.js`: keeps a copy for playing offline. On a connection that isn't answering, a page opens from that copy after four seconds. `FILES` in it is a fingerprint of the files it keeps: change one and `npm test` says what to set it to, so a release never leaves the copy half old.
 - `test/`: the rules and the solvers in Node, and every game played through the real page.
 - `scripts/build.mjs`: makes dist/patience.html, the one file you can send around (and dist/artifact.html, the same without the page around it, for places that supply their own).
