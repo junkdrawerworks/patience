@@ -2,7 +2,7 @@
 // It draws whatever state it's given, for whichever game that is, and reports what the player tried to do;
 // app.js decides what happens.
 
-import { SUITS, RANK_LABELS, suitOf, rankOf, cardName } from './cards.js';
+import { SUITS, SUIT_NAMES, RANK_LABELS, suitOf, rankOf, cardName } from './cards.js';
 import { gameOf } from './games/index.js';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -86,7 +86,8 @@ export class Table {
     m.dealFrom = L.dealFrom;
     this.m = m;
 
-    // The empty places on the table, one per pile.
+    // The empty places on the table, one per pile. Each is also the pile to a screen reader (see name()), so they come
+    // before the cards, in the order they're laid out: the top row, then the columns from the left.
     for (const id of Object.keys(this.spots)) if (!(id in m.spot)) { this.spots[id].remove(); delete this.spots[id]; }
     for (const p of [...L.top, ...L.tableau.map(id => ({ id, kind: 'column' }))]) {
       let el = this.spots[p.id];
@@ -94,13 +95,14 @@ export class Table {
         el = document.createElement('div');
         el.className = 'spot';
         el.dataset.pile = p.id;
-        this.el.prepend(el);
         this.spots[p.id] = el;
       }
       el.dataset.kind = p.kind;
-      if (p.kind === 'stock') el.innerHTML = RECYCLE; else el.textContent = p.label || '';
+      if (p.kind === 'stock') el.innerHTML = RECYCLE; else el.innerHTML = p.label ? `<span aria-hidden="true">${p.label}</span>` : '';
       el.style.transform = `translate(${m.spot[p.id]}px, ${p.kind === 'column' ? m.tabY : m.top}px)`;
     }
+    const spots = m.piles.map(id => this.spots[id]);
+    if (spots.some((el, i) => this.el.children[i] !== el)) this.el.prepend(...spots);
 
     const st = this.el.style;
     st.setProperty('--cw', cw + 'px');
@@ -235,7 +237,7 @@ export class Table {
       const was = el.style.transform.match(/-?[\d.]+/g) || [p.x, p.y];
       el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
       el.classList.toggle('down', !p.up);
-      el.setAttribute('aria-label', p.up ? cardName(c) : 'face-down card');
+      el.setAttribute('aria-label', p.up ? cardName(c) : 'face down');
       const flight = this.flights.get(c);
       if (holding?.has(c)) {
         el.style.transform = `translate(${Math.round(p.x + d.dx)}px, ${Math.round(p.y + d.dy)}px)`;
@@ -256,6 +258,7 @@ export class Table {
       }
     }
     this.at = at;
+    this.name(s);
     if (holding) this.aim();
     for (const id of m.piles) {
       if (m.kind[id] !== 'stock') continue;
@@ -263,6 +266,45 @@ export class Table {
       this.spots[id].classList.toggle('gone', !pile.down.length && !waste.up.length);
     }
     if (opts.still || (first && !opts.deal)) { void this.el.offsetWidth; this.el.classList.remove('still'); }
+  }
+
+  // What a screen reader finds on the table: each pile, in the order they're laid out, named for what it is and what's
+  // in it, holding the cards that can be seen and played (aria-owns puts them in it, in order, without moving them).
+  // The rest are left out: face-down cards (the pile says how many), the deck's, cards under the top card of a pile.
+  name(s) {
+    const m = this.m, g = this.game, said = new Set();
+    m.piles.forEach(id => {
+      const kind = m.kind[id], { down, up } = g.pile(s, id);
+      let label, cards = [];
+      if (kind === 'column') {
+        cards = up;
+        const n = m.order[id] - 99;
+        label = !down.length && !up.length ? `Empty column ${n}` : `Column ${n}${down.length ? `, ${down.length} face down` : ''}`;
+      } else if (kind === 'stock') {
+        const waste = g.pile(s, 'waste').up.length;
+        label = down.length ? `Deck, ${down.length} card${down.length === 1 ? '' : 's'}` : waste ? 'Deck empty, tap to turn the pile over' : 'Deck empty';
+      } else if (kind === 'deals') {
+        const rows = Math.ceil(down.length / 10);
+        label = rows ? `Deck, ${rows} row${rows === 1 ? '' : 's'} to deal` : 'Deck empty';
+      } else if (kind === 'sets') {
+        label = `Cleared runs, ${up.length / 13} of 8`;
+      } else if (kind === 'waste') {
+        cards = up.slice(-Math.max(1, g.fan?.(s) || 0));
+        label = up.length ? 'Waste' : 'Waste, empty';
+      } else if (id[0] === 'c') {
+        cards = up.slice(-1);
+        label = up.length ? 'Free cell' : 'Free cell, empty';
+      } else {
+        cards = up.slice(-1);
+        label = up.length ? `${SUIT_NAMES[suitOf(up[0])].replace(/^./, x => x.toUpperCase())} foundation` : 'Foundation, empty';
+      }
+      cards.forEach(c => said.add(c));
+      const el = this.spots[id];
+      attr(el, 'role', cards.length ? 'group' : 'img');
+      attr(el, 'aria-label', label);
+      attr(el, 'aria-owns', cards.length ? cards.map(c => 'card-' + c).join(' ') : null);
+    });
+    for (const [c, el] of this.cards) attr(el, 'aria-hidden', said.has(c) ? null : 'true');
   }
 
   // A card on its way somewhere flies over everything else, lifted off the table, and takes no taps, so a tap goes to
@@ -539,14 +581,23 @@ function rowsFor(s, L, up) {
 // the cards are now.
 const layoutKey = (s, left, step) => `${s.v}:${left ? 'L' : 'R'}:${rowsFor(s, gameOf(s).layout(s, left), step)}`;
 
+// Set an attribute only when it changes (null: take it away), so a screen reader hears nothing new for a table that isn't.
+function attr(el, name, value) {
+  if (el.getAttribute(name) === value) return;
+  if (value === null) el.removeAttribute(name); else el.setAttribute(name, value);
+}
+
+// A card is a picture to a screen reader, named in render(): its corner and middle aren't read out as well.
 function makeCard(c) {
   const el = document.createElement('div');
   const s = SUITS[suitOf(c)], r = rankOf(c), label = RANK_LABELS[r];
   el.className = `card ${s} down`;
+  el.id = 'card-' + c;
+  el.setAttribute('role', 'img');
   el.dataset.c = c;
   el.dataset.r = r;
   const sym = cls => `<svg class="${cls}" viewBox="0 0 100 100" aria-hidden="true"><use href="#suit-${s}"/></svg>`;
   const middle = r > 10 ? `<span class="court">${label}${sym('cc')}</span>` : sym('pip');
-  el.innerHTML = `<div class="flip"><div class="face"><span class="ix">${label}</span>${sym('cs')}${middle}</div><div class="back"></div></div>`;
+  el.innerHTML = `<div class="flip" aria-hidden="true"><div class="face"><span class="ix">${label}</span>${sym('cs')}${middle}</div><div class="back"></div></div>`;
   return el;
 }

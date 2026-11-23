@@ -713,6 +713,59 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c6.close();
 }
 
+// To a screen reader the table is its piles, in the order they're laid out, each named for what it is and what's in
+// it, holding the cards that can be seen, in order: no face-down card's rank, no corner letters, and no empty place
+// without a name. Klondike deal 52,817 as dealt, then FreeCell and Spider.
+{
+  const ca = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const pa = await ca.newPage();
+  const ready = () => pa.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const cdp = await ca.newCDPSession(pa);
+  // The table's part of the accessibility tree: [depth, role, name] for each node a screen reader can reach.
+  const tree = async () => {
+    const { nodes } = await cdp.send('Accessibility.getFullAXTree');
+    const byId = new Map(nodes.map(n => [n.nodeId, n])), out = [];
+    const walk = (n, d) => {
+      if (!n.ignored) out.push([d, n.role?.value, n.name?.value ?? '']);
+      for (const k of n.childIds || []) if (byId.has(k)) walk(byId.get(k), n.ignored ? d : d + 1);
+    };
+    walk(nodes.find(n => n.name?.value === 'Card table' && n.role?.value === 'group'), 0);
+    return out;
+  };
+  const deal = async (v, n) => { await pa.evaluate(([v, n]) => window.patience.newGame(v, n), [v, n]); await pa.waitForTimeout(2000); await ready(); };
+  await pa.goto(base);
+  await ready();
+  await deal('k1', 52817);
+  let t = await tree();
+  const down = await pa.evaluate(async () => {
+    const { cardName } = await import('./js/cards.js');
+    const s = window.patience.state;
+    return [...s.stock, ...s.tab.flatMap(c => c.down)].map(cardName);
+  });
+  assert.equal(down.length, 45);
+  assert.deepEqual(t.filter(([, , name]) => down.includes(name)), [], 'no face-down card is named');
+  assert.deepEqual(t.filter(([, role]) => role === 'StaticText'), [], 'no ranks or letters are read off the cards');
+  assert.deepEqual(t.filter(([d]) => d === 1).map(([, role, name]) => `${role}: ${name}`), [
+    'image: Foundation, empty', 'image: Foundation, empty', 'image: Foundation, empty', 'image: Foundation, empty',
+    'image: Waste, empty', 'image: Deck, 24 cards',
+    'group: Column 1', 'group: Column 2, 1 face down', 'group: Column 3, 2 face down', 'group: Column 4, 3 face down',
+    'group: Column 5, 4 face down', 'group: Column 6, 5 face down', 'group: Column 7, 6 face down',
+  ], 'every place on the table is named, in order');
+  assert.deepEqual(t.filter(([d]) => d === 2).map(([, , name]) => name), ['king of hearts', 'queen of diamonds', 'nine of hearts', 'six of clubs', 'seven of clubs', 'four of diamonds', 'seven of spades'],
+    'each column holds its face-up card');
+  await deal('fc', 617);
+  t = await tree();
+  assert.deepEqual(t.filter(([d]) => d === 1).map(([, , name]) => name).slice(0, 9), [...Array(4).fill('Free cell, empty'), ...Array(4).fill('Foundation, empty'), 'Column 1']);
+  const first = await pa.evaluate(async () => { const { cardName } = await import('./js/cards.js'); return window.patience.state.tab[0].map(cardName); });
+  const col1 = t.findIndex(([d, , name]) => d === 1 && name === 'Column 1');
+  assert.deepEqual(t.slice(col1 + 1, col1 + 1 + first.length).map(([d, , name]) => `${d} ${name}`), first.map(n => `2 ${n}`), 'the first column holds its cards, bottom to top');
+  await deal('s2', 5);
+  t = await tree();
+  assert.deepEqual(t.filter(([d]) => d === 1).map(([, , name]) => name).slice(0, 3), ['Cleared runs, 0 of 8', 'Deck, 5 rows to deal', 'Column 1, 5 face down']);
+  assert.deepEqual(t.filter(([, role]) => role === 'StaticText'), [], 'nor in Spider');
+  await ca.close();
+}
+
 // Tapping the card Hint lit up plays Hint's move, even where a tap would send it somewhere else, and the hint stays
 // lit until the next move. In FreeCell game 617 Hint's first move is the queen of hearts onto the king of clubs in the
 // third column, where a tap alone sends it to the second; in Klondike a card Hint wants back down off a foundation,
