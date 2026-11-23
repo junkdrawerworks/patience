@@ -378,18 +378,23 @@ export class Table {
     else this.render(this.state);
   }
 
-  // The legal pile the dragged cards overlap most.
+  // Where the dragged cards go when let go: the pile they're most over, if they may go there and aren't already in it,
+  // and only if they're well over it, a third of a card or the card's middle in the pile's area. Otherwise they go back,
+  // so a card nudged a little stays in its own column, and one let go mostly over a column it can't go on doesn't go
+  // to the next one along instead.
   dropTarget(d) {
-    const m = this.m, p = this.at.get(d.cards[0]);
+    const m = this.m, p = this.at.get(d.cards[0]), g = m.gap / 2;
     const r = { x: p.x + d.dx, y: p.y + d.dy, w: m.cw, h: m.ch };
-    let best = null, most = 0;
+    const over = z => Math.max(0, Math.min(r.x + r.w, z.x + z.w) - Math.max(r.x, z.x)) * Math.max(0, Math.min(r.y + r.h, z.y + z.h) - Math.max(r.y, z.y));
+    // Its own pile counts as where it came from, and the whole column if it came from one.
+    let best = d.pile, most = Math.max(over({ x: p.x - g, y: p.y - g, w: m.cw + 2 * g, h: m.ch + 2 * g }), m.kind[d.pile] === 'column' ? over(this.zone(d.pile)) : 0);
     for (const id of this.game.targets(this.state)) {
-      if (id === d.pile || !this.game.canDrop(this.state, d.cards, id)) continue;
-      const z = this.zone(id);
-      const a = Math.max(0, Math.min(r.x + r.w, z.x + z.w) - Math.max(r.x, z.x)) * Math.max(0, Math.min(r.y + r.h, z.y + z.h) - Math.max(r.y, z.y));
+      const a = id === d.pile ? 0 : over(this.zone(id));
       if (a > most) { most = a; best = id; }
     }
-    return best;
+    if (best === d.pile || !this.game.canDrop(this.state, d.cards, best)) return null;
+    const z = this.zone(best), cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    return most >= (r.w * r.h) / 3 || (cx >= z.x && cx < z.x + z.w && cy >= z.y && cy < z.y + z.h) ? best : null;
   }
 
   // The area that counts as dropping onto a pile: a column's whole length, or the pile's spot.

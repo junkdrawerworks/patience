@@ -1360,6 +1360,52 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await ch.close();
 }
 
+// A card let go where it was picked up, nudged a little, stays in its column, though it would fit on the next; one let
+// go mostly over a column it can't go on goes back, though it touches one it could; one let go mostly over a column
+// it can go on goes there. One-suit Spider with a mouse, where the columns are close together.
+{
+  const cn = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  const pn = await cn.newPage();
+  const errors = [];
+  pn.on('pageerror', e => errors.push(e.message));
+  const ready = () => pn.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pn.goto(base);
+  await ready();
+  // Deal 1 with a 5 on top of the ninth column, a 6 on the tenth and the seventh, and a 9 on the eighth.
+  const five = await pn.evaluate(async () => {
+    const { spider } = await import('./js/games/spider.js');
+    const s = spider.deal(1, 's1'), cards = [...s.stock, ...s.tab.flatMap(t => [...t.down, ...t.up])];
+    const find = (rank, not) => cards.find(c => c % 13 === rank - 1 && !not.includes(c));
+    const want = [[8, 5], [9, 6], [6, 6], [7, 9]], used = [];
+    for (const [col, rank] of want) {
+      const c = find(rank, used), t = s.tab[col], top = t.up.pop();
+      used.push(c);
+      // Swap it with the card that was there, wherever it is.
+      for (const pile of [s.stock, ...s.tab.flatMap(t => [t.down, t.up])]) { const i = pile.indexOf(c); if (i >= 0) pile[i] = top; }
+      t.up.push(c);
+    }
+    window.patience.load(s);
+    return used[0];
+  });
+  await ready();
+  const drop = async (dx, dy) => {
+    const b = await pn.locator(`.card[data-c="${five}"]`).boundingBox();
+    await pn.mouse.move(b.x + b.width / 2, b.y + 20);
+    await pn.mouse.down();
+    await pn.mouse.move(b.x + b.width / 2 + dx, b.y + 20 + dy, { steps: 6 });
+    await pn.mouse.up();
+    await ready();
+    return pn.evaluate(c => [window.patience.state.moves, window.patience.state.tab.findIndex(t => t.up.includes(c))], five);
+  };
+  const box = id => pn.locator(`.spot[data-pile="${id}"]`).boundingBox();
+  const [t6, t7, t8] = [await box('t6'), await box('t7'), await box('t8')];
+  assert.deepEqual(await drop(10, 0), [0, 8], 'nudged 10 px towards a column it fits on, it stays');
+  assert.deepEqual(await drop(t7.x - t8.x - 12, 0), [0, 8], 'let go mostly over the 9, 12 px towards a 6, it goes back');
+  assert.deepEqual(await drop(t6.x - t8.x + 12, 0), [1, 6], 'let go mostly over a 6, it goes there');
+  assert.deepEqual(errors, [], 'errors dropping cards');
+  await cn.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
