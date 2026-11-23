@@ -177,6 +177,7 @@ assert.equal(await page.isDisabled('#b-undo'), false, 'undo survives a reload');
 // Each setting's name is its bold line, with the rest as its description, and the record's list says what it's for.
 await page.click('#b-menu');
 assert.equal(await page.getByRole('checkbox', { name: 'Send cards up by themselves', exact: true }).count(), 1, 'a setting named by its bold line');
+assert.equal(await page.getByRole('checkbox', { name: 'Deck on the left', exact: true }).count(), 1, 'the deck, as everywhere else, not the stock');
 assert.equal(await page.getAttribute('#o-auto', 'aria-describedby').then(id => page.textContent('#' + id)), 'Once nothing on the table could still need a card, it goes to its foundation. In Klondike and FreeCell; Spider always clears a finished run by itself.');
 assert.equal(await page.getByRole('combobox', { name: 'Your record for', exact: true }).count(), 1);
 await page.click('#sheet-menu .close');
