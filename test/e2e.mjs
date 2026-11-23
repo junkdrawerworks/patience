@@ -206,7 +206,7 @@ await page.evaluate(playInto, { v: 'k3', n: 11705, steps: 9999 });
 await page.waitForSelector('#won:not([hidden])', { timeout: 20000 });
 await page.mouse.click(30, 300);
 await page.waitForSelector('#won .panel:not([hidden])');
-assert.match(await page.textContent('#won-line'), /Klondike, draw three, deal 11,705/);
+assert.match(await page.textContent('#won-line'), /Klondike, draw three, deal\s11,705/);
 const afterWin = await page.evaluate(() => window.patience.stats.k3);
 assert.equal(afterWin.won, before.won + 1);
 assert.equal(afterWin.streak, 1);
@@ -259,7 +259,7 @@ await page.evaluate(playInto, { v: 'fc', n: 617, steps: 9999 });
 await page.waitForSelector('#won:not([hidden])', { timeout: 30000 });
 await page.mouse.click(30, 300);
 await page.waitForSelector('#won .panel:not([hidden])');
-assert.match(await page.textContent('#won-line'), /FreeCell, deal 617/);
+assert.match(await page.textContent('#won-line'), /FreeCell, deal\s617/);
 assert.equal(await page.evaluate(() => window.patience.stats.fc.won), 1);
 
 // Spider: two decks; the deck deals a row onto every column, but not while one is empty.
