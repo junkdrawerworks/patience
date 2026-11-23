@@ -669,6 +669,14 @@ kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 
   animation: pop2 0.3s ease;
 }
 @keyframes pop2 { from { opacity: 0; transform: translate(-50%, -46%); } }
+/* A phone held sideways: a little tighter, with Play this deal again and Choose a game side by side (.plains, above),
+   so all three buttons show without scrolling. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .won .panel { width: min(calc(100% - 32px), 460px); padding-top: 14px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .won .panel h2 { font-size: 26px; margin-bottom: 4px; }
+  .won .panel p { margin-bottom: 12px; }
+  .won .panel .primary { margin-top: 12px; }
+}
 .won .panel h2 { font-size: 30px; margin-bottom: 6px; }
 .won .panel p { margin: 0 0 16px; color: var(--muted); text-wrap: balance; }
 /* A first win, the fastest yet or the best streak yet: said under the line, and its tile stands out. */

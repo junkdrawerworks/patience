@@ -437,6 +437,8 @@ function closeWon() {
   return true;
 }
 $('b-again').addEventListener('click', () => newGame(game.v));
+// The same deal from the start, on a new clock: a game won is over, so this one counts as another game played.
+$('b-replay').addEventListener('click', restart);
 $('b-pick').addEventListener('click', () => { closeWon(); openNew(); });
 
 // ---- the clock, the counts and the record ----
@@ -732,7 +734,7 @@ document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (!$('won').hidden) {
     // While the cards bounce, before the panel is up, Space, Enter or Escape brings it up, as a tap does. (Held down,
-    // it doesn't go on to press Deal again.)
+    // it doesn't go on to press Next deal.)
     if (e.repeat) { if (k === ' ' || k === 'enter') e.preventDefault(); return; }
     if ((k === ' ' || k === 'enter' || k === 'escape') && $('won').querySelector('.panel').hidden) { e.preventDefault(); showPanel(); }
     return;

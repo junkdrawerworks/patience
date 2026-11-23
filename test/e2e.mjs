@@ -1966,6 +1966,45 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cw.close();
 }
 
+// After a win, Play this deal again starts the same deal from the start on a new clock, and counts as another game once
+// a move is made, as starting a won deal again from the New game sheet does. Next deal deals another. FreeCell game 617.
+{
+  const cr = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
+  const pr = await cr.newPage();
+  const errors = [];
+  pr.on('pageerror', e => errors.push(e.message));
+  const ready = () => pr.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pr.goto(base);
+  await ready();
+  await pr.evaluate(playInto, { v: 'fc', n: 617, steps: 9999, ms: 250000 });
+  await pr.waitForSelector('#won .panel:not([hidden])', { timeout: 30000 });
+  assert.deepEqual(await pr.$$eval('#won button', bs => bs.map(b => b.textContent)), ['Next deal', 'Play this deal again', 'Choose a game']);
+  // All three show without scrolling, held sideways too.
+  for (const [width, height] of [[740, 360], [844, 390], [390, 844]]) {
+    await pr.setViewportSize({ width, height });
+    await pr.waitForTimeout(200);
+    const fit = await pr.$eval('#won .panel', p => [p.scrollHeight, p.clientHeight]);
+    assert.ok(fit[0] <= fit[1], `the won panel scrolls at ${width} by ${height}: ${fit}`);
+  }
+  const won = await pr.evaluate(() => ({ ...window.patience.stats.fc }));
+  await pr.click('#b-replay');
+  await pr.waitForSelector('#won', { state: 'hidden' });
+  await pr.waitForTimeout(800);
+  await ready();
+  const again = await pr.evaluate(() => ({ v: window.patience.state.v, deal: window.patience.state.deal, moves: window.patience.state.moves, time: document.getElementById('time').textContent }));
+  assert.deepEqual(again, { v: 'fc', deal: 617, moves: 0, time: '0:00' }, 'the same deal from the start, on a new clock');
+  assert.equal(await pr.evaluate(() => document.activeElement.id), 'table', 'the table has the keyboard');
+  // A move: another game played.
+  await pr.keyboard.press('h');
+  await pr.waitForSelector('.hint', { timeout: 20000 });
+  await pr.keyboard.press('Enter');
+  await ready();
+  assert.equal(await pr.evaluate(() => window.patience.stats.fc.played), won.played + 1, 'counted as another game once a move is made');
+  assert.equal(await pr.evaluate(() => window.patience.stats.fc.won), won.won);
+  assert.deepEqual(errors, [], 'errors playing a won deal again');
+  await cr.close();
+}
+
 // A phone turned while the cards bounce: they carry on at the new size, not stretched to it, and every card on the
 // foundations still shows, to bounce off in its turn. Once the panel is closed, turning the phone leaves the canvas alone.
 {

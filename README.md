@@ -14,7 +14,7 @@
 <p align="center">
   <img src="docs/phone-new.png" alt="The New game sheet: Klondike drawing one or three, FreeCell, and Spider with one, two or four suits, each with a line about how it plays" width="250">
   &nbsp;
-  <img src="docs/phone-won.png" alt="A won Klondike game: the cards bouncing off the foundations and leaving trails across the table, behind a panel saying You won, deal 52,817, in 4:41 and 161 moves, your fastest yet by 19 seconds, 18 won of 24 and a streak of 5" width="250">
+  <img src="docs/phone-won.png" alt="A won Klondike game: the cards bouncing off the foundations and leaving trails across the table, behind a panel saying You won, deal 52,817, in 4:41 and 161 moves, your fastest yet by 19 seconds, 18 won of 24 and a streak of 5, then Next deal, Play this deal again and Choose a game" width="250">
 </p>
 
 ## How it plays
