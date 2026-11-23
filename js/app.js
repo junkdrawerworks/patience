@@ -176,8 +176,8 @@ function undo() {
 
 async function newGame(v, number) {
   const ticket = ++dealing;
-  closeSheets();
-  closeWon();
+  // Chosen from a sheet or the won panel, the table takes focus, so the keyboard's Space and Enter play the new deal.
+  if (closeSheets() + closeWon()) focusTable();
   hideToast();
   cancelChain();
   clearTimeout(landed);
@@ -204,6 +204,7 @@ function restart() {
   closeSheets();
   if (!game || !game.moves) return;
   closeWon();
+  focusTable();
   dealing++; // a deal still being shuffled isn't wanted now
   settings.variant = game.v; // so this is the way of playing to remember, not the one given up on
   clearTimeout(slow);
@@ -293,6 +294,14 @@ function over() { return winCounted || G().won(game); }
 function inPlay() { return !!game && counted && !over(); }
 
 let showWon = 0; // the timer that brings up the won panel once the cards have bounced a while
+// (Under the New game sheet, if that was opened while the cards went up, focus stays there.)
+function showPanel() {
+  clearTimeout(showWon);
+  const panel = $('won').querySelector('.panel');
+  if (!panel.hidden) return;
+  panel.hidden = false;
+  if (!sheetOpen()) $('b-again').focus({ preventScroll: true });
+}
 function victory() {
   chain = 0;
   recordWin();
@@ -311,21 +320,20 @@ function victory() {
   overlay.hidden = false;
   panel.hidden = true;
   modal();
-  // (Under the New game sheet, if that was opened while the cards went up, focus stays there.)
-  const showPanel = () => { panel.hidden = false; if (!sheetOpen()) $('b-again').focus({ preventScroll: true }); };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     showPanel();
   } else {
     table.unbury();
     stopBounce = cascade($('bounce'), G().bounceOrder(game), c => table.rectOf(c), c => table.hide(c, true));
     showWon = setTimeout(showPanel, 3500);
-    overlay.addEventListener('pointerdown', () => { clearTimeout(showWon); showPanel(); }, { once: true });
+    // A tap, or Space, Enter or Escape (see the keys below), brings it up at once.
+    overlay.addEventListener('pointerdown', showPanel, { once: true });
   }
 }
 
-// Put the won panel away, if it's up.
+// Put the won panel away, if it's up. Returns whether it was.
 function closeWon() {
-  if ($('won').hidden) return;
+  if ($('won').hidden) return false;
   clearTimeout(showWon);
   stopBounce?.();
   stopBounce = null;
@@ -335,8 +343,9 @@ function closeWon() {
   modal();
   table.showAllCards();
   table.locked = false;
+  return true;
 }
-$('b-again').addEventListener('click', () => { closeWon(); newGame(game.v); });
+$('b-again').addEventListener('click', () => newGame(game.v));
 $('b-pick').addEventListener('click', () => { closeWon(); openNew(); });
 
 // ---- the clock, the counts and the record ----
@@ -534,6 +543,7 @@ function openSheet(id) {
   modal();
   ($(id).querySelector('.current') || $(id).querySelector('.close, button'))?.focus({ preventScroll: true });
 }
+// Returns how many were open.
 function closeSheets() {
   const open = document.querySelectorAll('.sheet:not([hidden])');
   open.forEach(s => { s.hidden = true; });
@@ -544,8 +554,10 @@ function closeSheets() {
     back?.focus?.({ preventScroll: true });
   }
   opener = null;
+  return open.length;
 }
 const sheetOpen = () => !!document.querySelector('.sheet:not([hidden])');
+function focusTable() { if (!sheetOpen() && $('won').hidden) table.el.focus({ preventScroll: true }); }
 
 // While a sheet or the won panel is open, the table, its buttons and any message behind it can't be reached.
 function modal() {
@@ -587,8 +599,20 @@ function hideToast() { $('toast').hidden = true; clearTimeout(toastTimer); notin
 
 document.addEventListener('keydown', e => {
   if (!$('sheet-new').hidden || !$('sheet-menu').hidden) { if (e.key === 'Escape') closeSheets(); return; }
-  if (!$('won').hidden || e.altKey || !game) return;
   const k = e.key.toLowerCase();
+  if (!$('won').hidden) {
+    // While the cards bounce, before the panel is up, Space, Enter or Escape brings it up, as a tap does.
+    if ((k === ' ' || k === 'enter' || k === 'escape') && $('won').querySelector('.panel').hidden) { e.preventDefault(); showPanel(); }
+    return;
+  }
+  if (e.altKey || !game) return;
+  // Escape lets go: of a card held with the mouse, or else the message showing, and focus goes back to the table.
+  if (k === 'escape') {
+    if (table.drag) table.letGo();
+    else hideToast();
+    focusTable();
+    return;
+  }
   if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
   else if (e.ctrlKey || e.metaKey) return;
   else if ((k === ' ' || k === 'enter') && keyFocus && e.target.closest?.('button, a, summary')) return; // the key presses it

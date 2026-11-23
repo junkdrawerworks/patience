@@ -143,6 +143,9 @@ button { font: inherit; color: inherit; }
   touch-action: none;
   isolation: isolate; /* cards stack among themselves, under the sheets */
 }
+/* The table takes the keyboard's Space and Enter (app.js); a ring says so when Tab or Escape brought focus here. */
+.table:focus { outline: none; }
+.table:focus-visible { outline: 2px solid var(--glow); outline-offset: -4px; border-radius: 10px; }
 /* Said in the middle of the felt while the first deal is still being shuffled. */
 .wait {
   position: absolute;

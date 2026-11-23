@@ -635,6 +635,22 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.equal(await p6.locator('.hint').count(), 0, 'and the move is no longer lit up');
   await p6.keyboard.press('z');
   await ready();
+  // The table is the first stop for Tab, and New the next. Escape takes focus back to the table, where Enter plays
+  // the move Hint is showing, as Space uses the deck.
+  await p6.keyboard.press('Tab');
+  assert.deepEqual(await p6.evaluate(() => [document.activeElement.id, document.activeElement.getAttribute('role'), document.activeElement.getAttribute('aria-label')]),
+    ['table', 'group', 'Card table'], 'the first Tab goes to the table');
+  await p6.keyboard.press('Tab');
+  assert.equal(await p6.evaluate(() => document.activeElement.id), 'b-new');
+  await p6.keyboard.press('h');
+  await lit();
+  await p6.keyboard.press('Escape');
+  assert.equal(await p6.evaluate(() => document.activeElement.id), 'table', 'Escape took focus to the table');
+  await p6.keyboard.press('Enter');
+  await ready();
+  assert.deepEqual((await now()).tab[2].up.slice(-2), [34, 20], 'Tab, Tab, H, Escape, Enter played the hint');
+  await p6.keyboard.press('z');
+  await ready();
   await p6.keyboard.press('Tab');
   assert.equal(await p6.evaluate(() => document.activeElement.id), 'b-new');
   await p6.keyboard.press('h');
@@ -664,6 +680,24 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p6.keyboard.press('h');
   await lit();
   assert.equal(await p6.textContent('#toast'), 'Draw for the ace of spades.');
+  // Escape takes the note away too.
+  await p6.keyboard.press('Escape');
+  assert.equal(await p6.isHidden('#toast'), true, 'Escape took the note away');
+
+  // Won, while the cards bounce, Enter brings the panel up rather than waiting for it; Enter then deals again, and the
+  // table has focus, so Space and Enter are the game's again.
+  await p6.evaluate(playInto, { v: 'fc', n: 617, steps: 9999 });
+  await p6.waitForSelector('#won:not([hidden])', { timeout: 30000 });
+  assert.equal(await p6.isHidden('#won .panel'), true, 'the cards bounce first');
+  await p6.keyboard.press('Enter');
+  assert.equal(await p6.isHidden('#won .panel'), false, 'Enter brought the won panel up');
+  assert.equal(await p6.evaluate(() => document.activeElement.id), 'b-again');
+  await p6.keyboard.press('Enter');
+  await p6.waitForSelector('#won', { state: 'hidden' });
+  await p6.waitForTimeout(1500);
+  await ready();
+  assert.equal((await now()).moves, 0, 'a new deal');
+  assert.equal(await p6.evaluate(() => document.activeElement.id), 'table', 'with the table focused');
   assert.deepEqual(errors, [], 'errors playing from the keyboard');
   await c6.close();
 }

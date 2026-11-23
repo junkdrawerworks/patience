@@ -385,6 +385,16 @@ export class Table {
     if (d) for (const c of d.cards) this.cards.get(c)?.classList.remove('drag');
   }
 
+  // Let go of the cards held, back where they came from (Escape).
+  letGo() {
+    const d = this.drag;
+    if (!d) return;
+    this.endDrag();
+    if (!d.moved) return;
+    this.flyNext = new Set(d.cards);
+    this.render(this.state);
+  }
+
   up(e, cancelled) {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
