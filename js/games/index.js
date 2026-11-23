@@ -45,7 +45,8 @@
 //   dealOrder(s)            the cards in the order they're dealt, for the dealing animation
 //   randomDeal()            a deal number
 //   budget                  how many positions the solver may look at: { deal, hint }, { all } for searchAll, and
-//                           { dead } for deadEnd
+//                           { dead } for deadEnd; Spider adds { idle }, as far as a look that ran out at `dead` carries on
+//                           while the table is left as it is
 
 import { klondike } from './klondike.js';
 import { freecell } from './freecell.js';

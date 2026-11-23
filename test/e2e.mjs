@@ -1496,6 +1496,28 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c18.close();
 }
 
+// A Spider look that runs out straight after a move carries on while the table is left as it is, and says so once it's
+// sure: two suits, deal 737,673 after 11 greedy moves, where it takes 44,337 tables to be sure, more than the look
+// straight after a move gets.
+{
+  const c19 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const p19 = await c19.newPage();
+  const errors = [];
+  p19.on('pageerror', e => errors.push(e.message));
+  const ready = () => p19.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await p19.goto(base);
+  await ready();
+  await p19.evaluate(() => window.patience.load({"v":"s2","deal":737673,"tab":[{"down":[172,70,110,20,125],"up":[128,68,123,121,112,166]},{"down":[161,111,6,2,126],"up":[5,115,65,113,116,180]},{"down":[75,159,60,171,74],"up":[25,24,63,158,10,163,176]},{"down":[179,7,170,64,4],"up":[107,54,117,8,178,73]},{"down":[162,56,23],"up":[15,53,59,109,160,57,108]},{"down":[61,66,18,181],"up":[174,119,118,13,17,62,127,58]},{"down":[169],"up":[122,175,77,165,167]},{"down":[71,164,173,52],"up":[1,0,120,19,14,156,104]},{"down":[177,21,11,129],"up":[124,3,67,22,12,157,168]},{"down":[55,105,16],"up":[72,9,69,114,76,106]}],"stock":[],"sets":[],"moves":10}));
+  await ready();
+  await p19.click('.card[data-c="57"]', { position: { x: 8, y: 8 } }); // the run of two onto the column beside it
+  await ready();
+  assert.equal((await p19.evaluate(() => window.patience.state)).tab[5].up.slice(-2).join(), '57,108', 'the run moved');
+  await p19.waitForSelector('#toast:not([hidden])', { timeout: 30000 });
+  assert.equal(await p19.textContent('#toast-words'), 'There are no moves left that help.');
+  assert.deepEqual(errors, [], 'errors while the look carried on');
+  await c19.close();
+}
+
 // Start this deal again is offered only once there's something to start again: not on a fresh deal. Part way through a
 // game, the sheet says a new deal counts it as a loss and starting it again doesn't, and starting it again keeps the
 // streak and the count of games played.

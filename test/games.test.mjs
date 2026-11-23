@@ -7,7 +7,7 @@ import { freecell, room } from '../js/games/freecell.js';
 import { spider } from '../js/games/spider.js';
 import { VARIANTS } from '../js/games/index.js';
 import { FOUR_SUIT_DEALS } from '../js/games/spider-deals.js';
-import { hintFor, primeLine, Dealer } from '../js/deals.js';
+import { hintFor, primeLine, Dealer, deadEnd } from '../js/deals.js';
 
 const S = 0, H = 1, C = 2, D = 3;
 const name = c => 'A23456789TJQK'[rankOf(c) - 1] + 'SHCD'[suitOf(c)];
@@ -306,6 +306,25 @@ test('Spider is out of moves when it takes a long look to be sure nothing helps'
   assert.equal(spider.deadEnd(s).run(400), 'unknown', 'a short look can’t tell');
   assert.equal(spider.outOfMoves(s), true);
   assert.equal(spider.deadEnd(s).none, false);
+});
+
+test('a Spider look that runs out straight after a move carries on further while the table is left, and can then be sure', async () => {
+  // Two suits, deal 737,673 played greedily for 10 moves: nothing can ever help, but it takes 88,675 tables to be sure,
+  // more than the look straight after a move gets. Carried on to the longer limit, the same look finds out.
+  const s = {"v":"s2","deal":737673,"tab":[{"down":[172,70,110,20,125],"up":[128,68,123,121,112,166]},{"down":[161,111,6,2,126],"up":[5,115,65,113,116,180]},{"down":[75,159,60,171,74],"up":[25,24,63,158,10,163,176]},{"down":[179,7,170,64,4],"up":[107,54,117,8,178,73]},{"down":[162,56,23],"up":[15,53,59,109,160,57,108]},{"down":[61,66,18,181],"up":[174,119,118,13,17,62,127,58]},{"down":[169],"up":[122,175,77,165,167]},{"down":[71,164,173,52],"up":[1,0,120,19,14,156,104]},{"down":[177,21,11,129],"up":[124,3,67,22,12,157,168]},{"down":[55,105,16],"up":[72,9,69,114,76,106]}],"stock":[],"sets":[],"moves":10};
+  assert.equal(new Set([...s.tab.flatMap(t => [...t.down, ...t.up])]).size, 104, 'every card once');
+  const first = await deadEnd(s);
+  assert.equal(first.result, null, 'the look straight after a move can’t tell');
+  assert.ok(first.nodes >= spider.budget.dead && first.nodes < spider.budget.dead + 100);
+  const more = await deadEnd(s, {}, { max: spider.budget.idle, look: first });
+  assert.equal(more, first, 'the same look, carried on');
+  assert.equal(more.result, 'dead');
+  assert.equal(more.none, false, 'the cards can still move about');
+  // And it stops as soon as the table changes.
+  let asked = 0;
+  const gone = await deadEnd(s, {}, { max: spider.budget.idle, stale: () => ++asked > 2 });
+  assert.equal(gone.result, null);
+  assert.ok(gone.nodes < spider.budget.dead, `looked at ${gone.nodes} tables after it was no longer wanted`);
 });
 
 test('a Spider run moved onto a card of the other suit counts when it uncovers cards that can go somewhere', () => {

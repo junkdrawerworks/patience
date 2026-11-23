@@ -33,11 +33,14 @@ function think(search, max, wait, stale) {
 }
 
 // Whether anything can still help from here (the game's deadEnd), looked at a slice at a time. Resolves with the look:
-// its result is 'dead' once it's sure nothing can, and none says there's no move at all. While `wait()` says so, it
-// waits, like think(); once `stale()` says the answer isn't wanted any more (another move made), it stops.
-export async function deadEnd(state, { auto = true } = {}, { wait, stale } = {}) {
-  const game = gameOf(state), look = game.deadEnd(state, { auto });
-  if (!look.result) await think({ get nodes() { return look.nodes; }, step: n => (stale?.() ? 'stale' : look.step(n)) }, game.budget.dead, wait);
+// its result is 'dead' once it's sure nothing can, 'live' once something can, and null if it got to `max` positions
+// (the game's budget.dead unless given) without knowing; none says there's no move at all. Given `look`, one of these
+// that ended without knowing, it carries on with that look, up to the new `max`. While `wait()` says so, it waits,
+// like think(); once `stale()` says the answer isn't wanted any more (another move made), it stops.
+export async function deadEnd(state, { auto = true } = {}, { wait, stale, max, look } = {}) {
+  const game = gameOf(state);
+  look ??= game.deadEnd(state, { auto });
+  if (!look.result) await think(look, max ?? game.budget.dead, wait, stale);
   return look;
 }
 

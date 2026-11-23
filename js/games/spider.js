@@ -191,6 +191,7 @@ export const spider = {
   randomDeal: () => 1 + Math.floor(Math.random() * 999999),
   // Hint gets as long as a deal was checked for, so its first press on a new deal finds the way through. Making sure
   // there's no way to win, the first half of `all` goes to the quick moves with spreading, the rest to every move.
-  // Making sure nothing can help, `dead` goes to looking at every table the moves reach.
-  budget: { deal: 120000, hint: 120000, all: 40000, dead: 20000 },
+  // Making sure nothing can help, `dead` goes to looking at every table the moves reach, straight after a move; while
+  // the table is then left as it is, the same look carries on to `idle`.
+  budget: { deal: 120000, hint: 120000, all: 40000, dead: 20000, idle: 100000 },
 };

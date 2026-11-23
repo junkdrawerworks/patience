@@ -46,6 +46,7 @@ let landed = 0;       // the timer that frees the table once a deal has landed
 let thinking = false; // the Hint button is searching
 let pressed = false;  // Hint was pressed again while it was searching
 let slowHint = 0;     // the timer that says Hint is still thinking
+let lookingOn = 0;    // a look for a move that helps is carrying on past its first limit (its ticket; see lookForMoves)
 const THINKING = 'Thinking…';
 let stopBounce = null;
 
@@ -72,7 +73,7 @@ const table = new Table($('table'), {
 // back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays as it was.
 // A Back meant to leave still leaves.
 guardEdges({ surfaces: [table.el] });
-const dealer = new Dealer(saved.next, () => write(), () => !!table.drag || table.locked || thinking);
+const dealer = new Dealer(saved.next, () => write(), () => !!table.drag || table.locked || thinking || !!lookingOn);
 
 // ---- playing ----
 
@@ -172,11 +173,23 @@ function after() {
 }
 
 // Once nothing can help, say so: no move at all, or none that leads anywhere. The look can take a while in Spider, so
-// it runs a slice at a time, and says nothing if another move has been made (or undone) by the time it knows.
+// it runs a slice at a time, and says nothing if another move has been made (or undone) by the time it knows. If it
+// gets to its limit without knowing (late in a hard Spider game), it carries on further while the table is left as it
+// is. That part waits while Hint thinks, as that's what the player is waiting for, and a deal being found in the
+// background waits for it, so the two never hold their memory at once.
 let looking = 0;
 async function lookForMoves() {
   const at = game, ticket = ++looking, stale = () => ticket !== looking || game !== at;
-  const d = await deadEnd(game, { auto: settings.auto }, { wait: () => !!table.drag || table.locked, stale });
+  const g = G(), auto = settings.auto, wait = () => !!table.drag || table.locked;
+  let d = await deadEnd(game, { auto }, { wait, stale });
+  if (!d.result && g.budget.idle && !stale()) {
+    lookingOn = ticket;
+    try {
+      d = await deadEnd(game, { auto }, { wait: () => wait() || thinking, stale, max: g.budget.idle, look: d });
+    } finally {
+      if (lookingOn === ticket) lookingOn = 0;
+    }
+  }
   if (stale() || over() || d.result !== 'dead') return;
   toast(d.none ? 'There are no moves left.' : 'There are no moves left that help.', [['Undo', undo], ['New game', openNew]]);
 }
