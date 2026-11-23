@@ -172,7 +172,16 @@ export async function hintFor(state, { auto = true } = {}) {
   if (known) return { move: known };
   line = new Map();
   lineAuto = auto;
-  let search = await think(game.search(state, { auto }), game.budget.hint);
+  // Drawing three with cards going up by themselves off, look first for a way with them on. That search is far smaller
+  // (a card that could go up never waits on the waste), and a way it finds can be played with the setting off too: the
+  // cards it sends up are moves of its own, made by hand. The search with the setting off often ran out of time and
+  // guessed, and a guess could lose a game that could be won. It's the only game whose search the setting changes.
+  let search = null;
+  if (!auto && state.v === 'k3') {
+    const on = await think(game.search(state, { auto: true }), game.budget.hint);
+    if (on.result === 'won') search = on;
+  }
+  search ??= await think(game.search(state, { auto }), game.budget.hint);
   // A search that leaves out moves which seldom help can't say there's no way through; look again with every move.
   // If that runs out too, Klondike's answer stands: its first search leaves out so little that a way through it missed
   // turns up quickly when there is one. Spider's leaves out more, so Hint suggests the move that looked best.

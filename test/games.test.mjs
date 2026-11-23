@@ -388,6 +388,9 @@ test('following Hint from a dealt deal wins, and Hint never goes round in circle
   await followHint('k3', 2003);
   await followHint('k3', 2018);
   await followHint('k3', 2003, { auto: false });
+  // Drawing three with cards going up by themselves off, Hint's search on this deal ran out of time on every press and
+  // guessed, and its eighth guess made the game unwinnable.
+  await followHint('k3', 70001, { auto: false });
   await followHint('fc', 617);
   await followHint('s1', 3);
 });
