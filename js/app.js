@@ -99,11 +99,16 @@ function act(next, m) {
   return true;
 }
 
-// Hint is drawing for card c, further down the deck: light up the deck and say which card, until it turns up.
-// (`again`: the note is showing already, and isn't read out again after each draw.)
+// Hint is drawing for card c, further down the deck: light up the deck and say which card, until it turns up. The words
+// go by where it is: with the deck empty, the tap turns it over; a card already passed on the waste (where it may even
+// be showing, under the top card) comes round again. (`again`: the note is showing already, and isn't read out again
+// after each draw unless its words change.)
 function drawFor(c, again) {
   table.showHint({ stock: true, c });
-  if (!again) toast(`Draw for the ${shortName(c)}.`, [], 0);
+  const name = shortName(c);
+  const words = !game.stock.length ? `Turn the deck over for the ${name}.`
+    : game.waste.includes(c) ? `Keep drawing: the ${name} comes round again.` : `Draw for the ${name}.`;
+  if (!again || $('toast-words').textContent !== words) toast(words, [], 0);
   noting = true;
   drawingFor = c;
 }

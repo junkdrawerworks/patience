@@ -1060,6 +1060,36 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cd.close();
 }
 
+// Hint's note on the card it's drawing for says what the tap does: drawing three, deal 285,984 after 12 moves, the ace of
+// hearts is in the waste's fan under the 7 of spades, so it comes round again; once the deck is empty, the tap turns it
+// over; then it's a draw again.
+{
+  const cw = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const pw3 = await cw.newPage();
+  const errors = [];
+  pw3.on('pageerror', e => errors.push(e.message));
+  const ready = () => pw3.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const note = () => pw3.textContent('#toast-words');
+  await pw3.goto(base);
+  await ready();
+  await pw3.evaluate(() => window.patience.load({ v: 'k3', deal: 285984, draw: 3, stock: [3, 38, 37, 2, 23, 50, 47, 16, 30],
+    waste: [44, 21, 12, 0, 49, 42, 5, 24, 41, 48, 35, 13, 36, 7], fan: 3, found: [[], [], [], []], moves: 12,
+    tab: [[[], [25]], [[], [20, 32, 18, 4]], [[33, 28], [1]], [[15, 40], [51]], [[10, 27, 14, 9], [45]], [[26, 29], [17]], [[39, 11, 31, 43, 34, 19], [22, 8, 46, 6]]]
+      .map(([down, up]) => ({ down, up })) }));
+  await ready();
+  await pw3.tap('#b-hint');
+  await pw3.waitForSelector('.hint', { timeout: 20000 });
+  assert.equal(await note(), 'Keep drawing: the ace of hearts comes round again.');
+  const draw = async () => { await pw3.tap('.spot[data-pile="stock"]', { force: true }); await pw3.waitForTimeout(400); await ready(); };
+  for (let i = 0; i < 3; i++) await draw();
+  assert.equal((await pw3.evaluate(() => window.patience.state)).stock.length, 0, 'the deck is empty');
+  assert.equal(await note(), 'Turn the deck over for the ace of hearts.');
+  await draw();
+  assert.equal(await note(), 'Draw for the ace of hearts.');
+  assert.deepEqual(errors, [], 'errors drawing for a card');
+  await cw.close();
+}
+
 // When Hint takes more than a moment, the line at the top says it's thinking, and goes back once it has answered.
 // Four-suit Spider deal 35 takes the solver about 100,000 positions; the processor is slowed to a phone's here.
 {
