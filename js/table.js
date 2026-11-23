@@ -19,7 +19,7 @@ export class Table {
     this.spots = {};
     this.cards = new Map(); // card -> element
     this.at = new Map();    // card -> where it's drawn: { x, y, z, up, pile, index, deep }
-    this.timers = new Map();
+    this.flights = new Map(); // card -> its landing, while it's on its way: { timer, z, deep } (see fly())
     this.drag = null;
     this.dealDuration = 0;
 
@@ -39,6 +39,8 @@ export class Table {
     const sig = s.v[0] + ':' + ids.join(',');
     if (sig !== this.sig) {
       for (const el of this.cards.values()) el.remove();
+      for (const f of this.flights.values()) clearTimeout(f.timer);
+      this.flights = new Map();
       this.cards = new Map();
       this.at = new Map();
       for (const c of ids) {
@@ -221,16 +223,19 @@ export class Table {
       const el = this.cards.get(c);
       el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
       el.classList.toggle('down', !p.up);
-      el.classList.toggle('deep', !!p.deep && !(movedSet.has(c) && animate));
       el.setAttribute('aria-label', p.up ? cardName(c) : 'face-down card');
-      clearTimeout(this.timers.get(c));
+      const flight = this.flights.get(c);
       if (movedSet.has(c) && animate) {
-        // Fly over everything else on the way, then settle into the pile (and hide again if it's buried).
-        el.style.zIndex = 5000 + p.z;
-        const landed = opts.deal ? this.dealDuration + 300 : 300 + (waits.get(c) || 0);
-        this.timers.set(c, setTimeout(() => { el.style.zIndex = p.z; el.classList.toggle('deep', !!p.deep); }, landed));
+        this.fly(c, p, opts.deal ? this.dealDuration + 300 : 300 + (waits.get(c) || 0));
+      } else if (flight && animate) {
+        // Still on its way from an earlier move, to the same place: it lands when it gets there, as it would have,
+        // and not under the cards it's passing. Only its place in the pile may have changed.
+        flight.z = p.z;
+        flight.deep = p.deep;
       } else {
+        this.land(c);
         el.style.zIndex = p.z;
+        el.classList.toggle('deep', !!p.deep);
       }
     }
     this.at = at;
@@ -240,6 +245,29 @@ export class Table {
       this.spots[id].classList.toggle('gone', !pile.down.length && !waste.up.length);
     }
     if (opts.still || (first && !opts.deal)) { void this.el.offsetWidth; this.el.classList.remove('still'); }
+  }
+
+  // A card on its way somewhere flies over everything else, and takes no taps, so a tap goes to whatever is under it:
+  // a quick second tap on the Spider deck while the last row is still leaving it deals another row. After `ms` it
+  // settles into its pile, and hides again if it's buried there.
+  fly(c, p, ms) {
+    const el = this.cards.get(c);
+    clearTimeout(this.flights.get(c)?.timer);
+    el.style.zIndex = 5000 + p.z;
+    el.classList.remove('deep');
+    el.classList.add('flying');
+    this.flights.set(c, { z: p.z, deep: p.deep, timer: setTimeout(() => this.land(c), ms) });
+  }
+
+  land(c) {
+    const f = this.flights.get(c);
+    if (!f) return;
+    clearTimeout(f.timer);
+    this.flights.delete(c);
+    const el = this.cards.get(c);
+    el.style.zIndex = f.z;
+    el.classList.toggle('deep', !!f.deep);
+    el.classList.remove('flying');
   }
 
   // ---- picking cards up ----
@@ -257,6 +285,14 @@ export class Table {
 
     if (kind === 'stock' || kind === 'deals') { this.on.stock(); return; }
     if (kind === 'sets') return;
+    if (kind === 'column') {
+      // A card still arriving on this column takes no press itself (see fly()), but a press where it's landing is for it.
+      const up = this.game.pile(s, pile).up, r = this.el.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      for (let i = up.length - 1; i > index; i--) {
+        const p = this.at.get(up[i]);
+        if (this.flights.has(up[i]) && x >= p.x && x < p.x + m.cw && y >= p.y && y < p.y + m.ch) { index = i; break; }
+      }
+    }
     if (kind !== 'column') index = this.game.pile(s, pile).up.length - 1;
     if (index < 0) return;
     const cards = this.game.lift(s, pile, index);
@@ -277,7 +313,7 @@ export class Table {
       if (Math.hypot(dx, dy) < (d.mouse ? 4 : 8)) return;
       d.moved = true;
       this.clearHint();
-      d.cards.forEach((c, i) => { const el = this.cards.get(c); el.classList.add('drag'); el.style.zIndex = 9000 + i; });
+      d.cards.forEach((c, i) => { this.land(c); const el = this.cards.get(c); el.classList.add('drag'); el.style.zIndex = 9000 + i; });
     }
     d.dx = dx; d.dy = dy;
     for (const c of d.cards) {

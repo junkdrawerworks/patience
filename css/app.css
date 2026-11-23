@@ -258,6 +258,7 @@ button { font: inherit; color: inherit; }
 .card.down .flip { transform: rotateY(180deg); }
 .card.down { cursor: default; }
 .card.deep { visibility: hidden; }
+.card.flying { pointer-events: none; }
 .card.drag .flip { translate: 0 -2px; }
 .card.drag .face { box-shadow: 0 0 0 1px var(--card-edge), 0 8px 18px rgba(0, 0, 0, 0.3); }
 

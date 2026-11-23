@@ -1215,6 +1215,91 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c16.close();
 }
 
+// Cards on their way somewhere don't take a tap or a press: a quick second tap on the Spider deck, while the last
+// cards of the row just dealt are still leaving it, deals a second row instead of moving one of them. And no card in
+// flight passes under a card at rest, even when the next move starts before it lands: FreeCell finishing itself
+// sends a card up every 80 ms, each a long way from the foot of its column.
+{
+  const cf = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pf = await cf.newPage();
+  const errors = [];
+  pf.on('pageerror', e => errors.push(e.message));
+  const ready = () => pf.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pf.goto(base);
+  await ready();
+  for (const n of [5, 6, 7]) {
+    await pf.evaluate(n => window.patience.newGame('s2', n), n);
+    await pf.waitForTimeout(500);
+    await ready();
+    const deck = await pf.locator('.spot[data-pile="stock"]').boundingBox();
+    const twice = await pf.evaluate(async () => {
+      const { spider } = await import('./js/games/spider.js');
+      const s = window.patience.state;
+      return spider.stock(spider.stock(s)).tab;
+    });
+    await pf.touchscreen.tap(deck.x + deck.width / 2, deck.y + deck.height / 2);
+    await pf.waitForTimeout(200);
+    await pf.touchscreen.tap(deck.x + deck.width / 2, deck.y + deck.height / 2);
+    await pf.waitForTimeout(400);
+    await ready();
+    const s = await pf.evaluate(() => window.patience.state);
+    assert.deepEqual([s.stock.length, s.moves], [30, 2], `two-suit Spider deal ${n}: a quick second tap on the deck deals a second row`);
+    assert.deepEqual(s.tab, twice, `two-suit Spider deal ${n}: and no card moved`);
+  }
+
+  // A press where a card is landing is for that card, not the one it's landing on. FreeCell: the 7 of hearts goes onto
+  // the 8 of spades, and a tap there straight after sends the 7 on to the only empty column, leaving the 8 where it is.
+  await pf.evaluate(() => {
+    const card = (suit, rank) => suit * 13 + rank - 1;
+    window.patience.load({ v: 'fc', deal: 617, cells: [null, null, null, null], found: [[], [], [], []], moves: 3,
+      tab: [[card(2, 13), card(0, 8)], [card(0, 13), card(1, 9)], [card(1, 7)], [card(2, 12)], [card(2, 11)], [card(3, 13)], [card(3, 12)], [card(3, 11)]] });
+  });
+  await ready();
+  const eight = await pf.locator('.card[data-c="7"]').boundingBox(), seven = await pf.locator('.card[data-c="19"]').boundingBox();
+  await pf.touchscreen.tap(seven.x + seven.width / 2, seven.y + seven.height / 2);
+  await pf.waitForTimeout(60);
+  await pf.touchscreen.tap(eight.x + eight.width / 2, eight.y + eight.height * 0.36 + eight.height * 0.3);
+  await pf.waitForTimeout(400);
+  await ready();
+  const on = await pf.evaluate(() => [window.patience.state.moves, ...window.patience.state.tab.slice(0, 3).map(t => t.join(' '))]);
+  assert.deepEqual(on, [5, '38 7', '12 21', '19'], 'the 7 of hearts went on to the empty column, and the 8 of spades stayed');
+
+  // FreeCell, every column in order, so the game finishes itself.
+  const under = await pf.evaluate(async () => {
+    const card = (suit, rank) => suit * 13 + rank - 1;
+    // Kings of spades and clubs head runs with hearts and diamonds between, and the red kings the other way round:
+    // each run split in two columns, K to 8 and 7 to A.
+    const run = (black, red, startBlack) => Array.from({ length: 13 }, (_, i) => card((i % 2 === 0) === startBlack ? black : red, 13 - i));
+    const runs = [run(0, 1, true), run(0, 1, false), run(2, 3, true), run(2, 3, false)];
+    const tab = runs.flatMap(r => [r.slice(0, 6), r.slice(6)]);
+    const seen = { hits: 0, samples: 0, first: null };
+    let going = true;
+    const tick = () => {
+      const cards = [...document.querySelectorAll('.card')];
+      const moving = cards.filter(el => el.getAnimations().some(a => a.transitionProperty === 'transform' && a.playState === 'running' && a.currentTime > 0));
+      if (moving.length) seen.samples++;
+      for (const f of moving) {
+        const fr = f.getBoundingClientRect(), fz = +f.style.zIndex || 0;
+        const over = cards.filter(o => o !== f && !moving.includes(o) && getComputedStyle(o).visibility !== 'hidden' && (+o.style.zIndex || 0) > fz).filter(o => {
+          const r = o.getBoundingClientRect();
+          return Math.min(fr.right, r.right) - Math.max(fr.left, r.left) > 8 && Math.min(fr.bottom, r.bottom) - Math.max(fr.top, r.top) > 8;
+        });
+        if (over.length) { seen.hits++; seen.first ??= `card ${f.dataset.c} under ${over[0].dataset.c}`; }
+      }
+      if (going) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    window.patience.load({ v: 'fc', deal: 617, cells: [null, null, null, null], found: [[], [], [], []], tab, moves: 80 });
+    await new Promise(res => { const wait = () => (document.querySelector('#won:not([hidden])') ? res() : setTimeout(wait, 50)); wait(); });
+    going = false;
+    return seen;
+  });
+  assert.ok(under.samples > 20, `cards were seen moving (${under.samples} frames)`);
+  assert.equal(under.hits, 0, `a card in flight passed under a card at rest: ${under.first}`);
+  assert.deepEqual(errors, [], 'errors with cards in flight');
+  await cf.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
