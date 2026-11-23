@@ -221,12 +221,16 @@ export class Table {
     const animate = !opts.still && (!first || opts.deal);
     for (const [c, p] of at) {
       const el = this.cards.get(c);
+      const was = el.style.transform.match(/-?[\d.]+/g) || [p.x, p.y];
       el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
       el.classList.toggle('down', !p.up);
       el.setAttribute('aria-label', p.up ? cardName(c) : 'face-down card');
       const flight = this.flights.get(c);
       if (movedSet.has(c) && animate) {
-        this.fly(c, p, opts.deal ? this.dealDuration + 300 : 300 + (waits.get(c) || 0));
+        // The further it goes, the longer it takes, so a long trip doesn't look like a jump.
+        const ms = Math.round(Math.min(320, 170 + 0.12 * Math.hypot(p.x - was[0], p.y - was[1])));
+        el.style.setProperty('--travel', `${ms}ms`);
+        this.fly(c, p, ms + 40 + (waits.get(c) || 0));
       } else if (flight && animate) {
         // Still on its way from an earlier move, to the same place: it lands when it gets there, as it would have,
         // and not under the cards it's passing. Only its place in the pile may have changed.
@@ -247,9 +251,9 @@ export class Table {
     if (opts.still || (first && !opts.deal)) { void this.el.offsetWidth; this.el.classList.remove('still'); }
   }
 
-  // A card on its way somewhere flies over everything else, and takes no taps, so a tap goes to whatever is under it:
-  // a quick second tap on the Spider deck while the last row is still leaving it deals another row. After `ms` it
-  // settles into its pile, and hides again if it's buried there.
+  // A card on its way somewhere flies over everything else, lifted off the table, and takes no taps, so a tap goes to
+  // whatever is under it: a quick second tap on the Spider deck while the last row is still leaving it deals another
+  // row. After `ms`, once it's there, it settles into its pile, and hides again if it's buried there.
   fly(c, p, ms) {
     const el = this.cards.get(c);
     clearTimeout(this.flights.get(c)?.timer);
@@ -268,7 +272,10 @@ export class Table {
     el.style.zIndex = f.z;
     el.classList.toggle('deep', !!f.deep);
     el.classList.remove('flying');
+    el.style.removeProperty('--travel');
   }
+
+  get moving() { return this.flights.size > 0; }
 
   // ---- picking cards up ----
 

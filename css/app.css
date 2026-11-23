@@ -244,7 +244,9 @@ button { font: inherit; color: inherit; }
   top: 0;
   width: var(--cw);
   height: var(--ch);
-  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1);
+  /* --travel is set for each move, longer for a longer trip (table.js) */
+  transition: transform var(--travel, 0.2s) cubic-bezier(0.3, 0.6, 0.3, 1);
+  perspective: calc(var(--cw) * 5); /* so a card turning over has depth, rather than squashing flat */
   cursor: pointer;
 }
 .table.still .card, .card.drag { transition: none; }
@@ -260,7 +262,7 @@ button { font: inherit; color: inherit; }
 .card.deep { visibility: hidden; }
 .card.flying { pointer-events: none; }
 .card.drag .flip { translate: 0 -2px; }
-.card.drag .face { box-shadow: 0 0 0 1px var(--card-edge), 0 8px 18px rgba(0, 0, 0, 0.3); }
+.card.drag .face, .card.flying:not(.down) .face { box-shadow: 0 0 0 1px var(--card-edge), 0 8px 18px rgba(0, 0, 0, 0.3); }
 
 .face, .back {
   position: absolute;

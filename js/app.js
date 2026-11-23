@@ -675,7 +675,7 @@ function resume(kept) {
 // tables before it, for Undo.
 window.patience = {
   get state() { return game; },
-  get busy() { return table.locked || !!chain; },
+  get busy() { return table.locked || !!chain || table.moving; },
   load(state, ms = 0, past = []) { cancelChain(); clearTimeout(landed); game = state; history = past.slice(); elapsed = ms; since = 0; winCounted = false; table.locked = false; table.render(game, { still: true }); showInfo(); after(); },
   newGame,
   settings,
