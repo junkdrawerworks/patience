@@ -35,6 +35,7 @@ let history = [];     // where they were before each move, for Undo
 let elapsed = 0;      // time spent on this game, not counting time away
 let since = 0;        // when the clock last started, or 0 while it's stopped
 let counted = false;  // whether this game has been counted as played (it is from the first move)
+let winCounted = false; // whether this game's win is in the record (from the moment it's sure, before the cards go up)
 let chain = 0;        // the timer for the next card going up by itself
 let dealing = 0;      // counts the deals asked for, so only the latest one is dealt
 let slow = 0;         // the timer that says a deal is still being shuffled
@@ -70,7 +71,7 @@ const dealer = new Dealer(ready, () => write());
 // Make a move the player asked for. Returns false if there was nothing to do.
 // A won game is finished: it can be looked at, but not played on or undone, so it can't be won twice.
 function act(next) {
-  if (!next || table.locked || G().won(game)) return false;
+  if (!next || table.locked || over()) return false;
   cancelChain();
   table.clearHint();
   if (noting) hideToast(); // Hint's note on the card it was drawing for goes with the hint
@@ -83,6 +84,7 @@ function act(next) {
 
 function set(next) {
   game = next;
+  if (G().won(game)) recordWin(); // before it's saved, so the save never holds a won game without its win
   table.render(game);
   showInfo();
   write();
@@ -93,8 +95,8 @@ function set(next) {
 function after() {
   cancelChain(); // only one thing comes next
   const g = G();
-  if (g.won(game)) { chain = setTimeout(victory, 700); return; }
-  if (g.finishable(game)) { finish(); return; }
+  if (g.won(game)) { recordWin(); chain = setTimeout(victory, 700); return; }
+  if (g.finishable(game)) { recordWin(); finish(); return; }
   if (settings.auto) {
     const step = g.autoStep(game);
     if (step) {
@@ -133,7 +135,7 @@ function finish() {
 }
 
 function undo() {
-  if (!history.length || table.locked || G().won(game)) return;
+  if (!history.length || table.locked || over()) return;
   cancelChain();
   hideToast();
   game = history.pop();
@@ -145,11 +147,11 @@ function undo() {
 async function newGame(v, number) {
   const ticket = ++dealing;
   closeSheets();
+  closeWon();
   hideToast();
   cancelChain();
   clearTimeout(landed);
   clearTimeout(slow);
-  if (game && counted && !G().won(game)) stats[game.v].streak = 0; // leaving a game part way counts as a loss
   settings.variant = v;
   table.locked = true;
   const g = VARIANTS[v].game;
@@ -157,12 +159,16 @@ async function newGame(v, number) {
   const n = number ?? (settings.winnable ? await dealer.take(v) : g.randomDeal());
   if (ticket !== dealing) return; // another game was chosen while this one was being shuffled
   clearTimeout(slow);
+  // Leaving a game part way counts as a loss. Not until the new deal is here: a page closed while it's still being
+  // shuffled opens on the same game again, which isn't lost.
+  if (inPlay()) stats[game.v].streak = 0;
   start(g.deal(n, v));
 }
 
 function restart() {
   closeSheets();
   if (!game || !game.moves) return;
+  closeWon();
   dealing++; // a deal still being shuffled isn't wanted now
   settings.variant = game.v; // so this is the way of playing to remember, not the one given up on
   clearTimeout(slow);
@@ -180,6 +186,7 @@ function start(state, again) {
   // all the time spent on that deal, not just the last try. Once it's won, starting it again is a new game with a new clock.
   if (again && counted) stopClock();
   else { elapsed = 0; since = 0; counted = false; }
+  winCounted = false;
   table.render(game, { deal: true });
   showInfo();
   write();
@@ -216,11 +223,12 @@ function play(m) {
 
 // ---- winning ----
 
-function victory() {
-  chain = 0;
-  table.locked = true;
+// The game is won, or is sure to be, all its cards in order and going up by themselves: into the record it goes, and
+// the save lets the game go, so neither leaving now nor a reload can lose the win or count it twice. Only once a game.
+function recordWin() {
+  if (winCounted) return;
+  winCounted = true;
   stopClock();
-  showInfo(); // the last cards may have gone up by themselves; Undo goes off
   const st = stats[game.v];
   if (!counted) st.played++;
   st.won++;
@@ -229,6 +237,20 @@ function victory() {
   st.fastest = st.fastest ? Math.min(st.fastest, elapsed) : elapsed;
   counted = false;
   write();
+}
+
+// A game won (or sure to be, so it can't be lost) is over: it can be looked at, but not played on.
+function over() { return winCounted || G().won(game); }
+// A game that would count as a loss if left now.
+function inPlay() { return !!game && counted && !over(); }
+
+let showWon = 0; // the timer that brings up the won panel once the cards have bounced a while
+function victory() {
+  chain = 0;
+  recordWin();
+  table.locked = true;
+  showInfo(); // the last cards may have gone up by themselves; Undo goes off
+  const st = stats[game.v];
 
   $('won-line').textContent = `${label(game.v)}, deal ${game.deal.toLocaleString('en-US')}, in ${clock(elapsed)} and ${plural(game.moves, 'move')}.`;
   $('won-stats').innerHTML = tiles([
@@ -241,18 +263,22 @@ function victory() {
   overlay.hidden = false;
   panel.hidden = true;
   modal();
-  const showPanel = () => { panel.hidden = false; $('b-again').focus({ preventScroll: true }); };
+  // (Under the New game sheet, if that was opened while the cards went up, focus stays there.)
+  const showPanel = () => { panel.hidden = false; if (!sheetOpen()) $('b-again').focus({ preventScroll: true }); };
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     showPanel();
   } else {
     table.unbury();
     stopBounce = cascade($('bounce'), G().bounceOrder(game), c => table.rectOf(c), c => table.hide(c, true));
-    const timer = setTimeout(showPanel, 3500);
-    overlay.addEventListener('pointerdown', () => { clearTimeout(timer); showPanel(); }, { once: true });
+    showWon = setTimeout(showPanel, 3500);
+    overlay.addEventListener('pointerdown', () => { clearTimeout(showWon); showPanel(); }, { once: true });
   }
 }
 
+// Put the won panel away, if it's up.
 function closeWon() {
+  if ($('won').hidden) return;
+  clearTimeout(showWon);
   stopBounce?.();
   stopBounce = null;
   const canvas = $('bounce');
@@ -282,14 +308,14 @@ function showInfo() {
   $('status').textContent = `${label(game.v)} · Deal ${game.deal.toLocaleString('en-US')}`;
   $('moves').textContent = plural(game.moves, 'move');
   $('time').textContent = clock(played());
-  $('b-undo').disabled = !history.length || G().won(game);
+  $('b-undo').disabled = !history.length || over();
   document.documentElement.dataset.game = VARIANTS[game.v].name.toLowerCase();
 }
 setInterval(() => { if (game && since) $('time').textContent = clock(played()); }, 1000);
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { stopClock(); write(); }
-  else if (counted && game && !G().won(game)) startClock();
+  else if (inPlay()) startClock();
 });
 window.addEventListener('pagehide', () => { stopClock(); write(); });
 
@@ -322,10 +348,12 @@ function read() {
 }
 
 function write() {
-  // The whole undo list goes too, so Undo still goes all the way back after the page is closed. The last 2,000 moves
-  // is more than a game takes, and keeps the save to about a megabyte even in Spider.
-  const g = game && !G().won(game) ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
-  try { localStorage.setItem(KEY, JSON.stringify({ settings, stats, next: dealer?.ready, game: g })); } catch { /* storage full or blocked */ }
+  try {
+    // The whole undo list goes too, so Undo still goes all the way back after the page is closed. The last 2,000 moves
+    // is more than a game takes, and keeps the save to about a megabyte even in Spider. A game won is left out.
+    const g = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
+    localStorage.setItem(KEY, JSON.stringify({ settings, stats, next: dealer?.ready, game: g }));
+  } catch { /* storage full or blocked */ }
 }
 
 // ---- settings ----
@@ -369,7 +397,7 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 
 function openNew() {
   hideToast();
-  $('new-note').hidden = !(counted && game && !G().won(game));
+  $('new-note').hidden = !inPlay();
   $('b-restart').hidden = !game || !game.moves;
   document.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('current', b.dataset.v === (game?.v || settings.variant)));
   openSheet('sheet-new');
@@ -388,13 +416,18 @@ function closeSheets() {
   const open = document.querySelectorAll('.sheet:not([hidden])');
   open.forEach(s => { s.hidden = true; });
   modal(); // before focus goes back, since nothing inert can take it
-  if (open.length && opener?.focus) opener.focus({ preventScroll: true });
+  if (open.length) {
+    // Back to the won panel, if the game was won under the sheet, or else to what opened it.
+    const back = $('won').hidden ? opener : $('won').querySelector('.panel:not([hidden]) .primary');
+    back?.focus?.({ preventScroll: true });
+  }
   opener = null;
 }
+const sheetOpen = () => !!document.querySelector('.sheet:not([hidden])');
 
 // While a sheet or the won panel is open, the table, its buttons and any message behind it can't be reached.
 function modal() {
-  const blocked = !!document.querySelector('.sheet:not([hidden])') || !$('won').hidden;
+  const blocked = sheetOpen() || !$('won').hidden;
   $('game').inert = blocked;
   $('toast').inert = blocked;
 }
@@ -459,6 +492,7 @@ function resume(g) {
     history = g.history;
     elapsed = Number.isFinite(g.elapsed) ? g.elapsed : 0;
     counted = !!g.counted;
+    winCounted = false;
     table.render(game, { still: true });
     showInfo();
     after();
@@ -479,7 +513,7 @@ function resume(g) {
 window.patience = {
   get state() { return game; },
   get busy() { return table.locked || !!chain; },
-  load(state, ms = 0) { cancelChain(); clearTimeout(landed); game = state; history = []; elapsed = ms; since = 0; table.locked = false; table.render(game, { still: true }); showInfo(); after(); },
+  load(state, ms = 0) { cancelChain(); clearTimeout(landed); game = state; history = []; elapsed = ms; since = 0; winCounted = false; table.locked = false; table.render(game, { still: true }); showInfo(); after(); },
   newGame,
   settings,
   stats,

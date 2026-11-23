@@ -745,6 +745,113 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await c10.close();
 }
 
+// A win counts the moment it's sure. Reloading 50 ms after the last card goes up, before the won panel, keeps the win,
+// and a second reload doesn't count it again: the game is gone from the save, and a new one is dealt.
+{
+  const c11 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const p11 = await c11.newPage();
+  const errors = [];
+  p11.on('pageerror', e => errors.push(e.message));
+  const ready = () => p11.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const saved = () => p11.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')));
+  await p11.goto(base);
+  await ready();
+  // Klondike with every card up but the king of spades, the last card on the waste.
+  const lastCard = () => p11.evaluate(() => {
+    window.patience.settings.auto = false;
+    window.patience.load({
+      v: 'k1', deal: 11705, draw: 1, stock: [], waste: [51], fan: 0, moves: 150,
+      found: [0, 1, 2, 3].map(suit => Array.from({ length: suit === 3 ? 12 : 13 }, (_, r) => suit * 13 + r)),
+      tab: Array.from({ length: 7 }, () => ({ down: [], up: [] })),
+    });
+  });
+  await lastCard();
+  const before = (await saved()).stats.k1;
+  await p11.click('.card[data-c="51"]', { position: { x: 12, y: 10 } });
+  await p11.waitForTimeout(50);
+  await p11.reload();
+  await ready();
+  const once = (await saved()).stats.k1;
+  assert.deepEqual([once.played, once.won, once.streak], [before.played + 1, before.won + 1, before.streak + 1], 'the win was kept through a reload');
+  assert.notEqual((await p11.evaluate(() => window.patience.state)).moves, 151, 'and the won game is gone');
+  await p11.reload();
+  await ready();
+  assert.deepEqual((await saved()).stats.k1, once, 'a second reload counts nothing more');
+  // N pressed just after the last card, and a new game chosen before the won panel: the win counts, and the streak goes on.
+  await lastCard();
+  await p11.click('.card[data-c="51"]', { position: { x: 12, y: 10 } });
+  await p11.waitForTimeout(150);
+  await p11.keyboard.press('n');
+  assert.equal(await p11.isHidden('#new-note'), true, 'a won game is no loss');
+  await p11.click('[data-v="k1"]');
+  await p11.waitForTimeout(1500);
+  await ready();
+  const k1 = await p11.evaluate(() => window.patience.stats.k1);
+  assert.deepEqual([k1.won, k1.streak], [once.won + 1, once.streak + 1], 'New game straight after the last card');
+  assert.equal(await p11.isHidden('#won'), true, 'no won panel over the new deal');
+  assert.deepEqual(errors, []);
+  await c11.close();
+}
+
+// A Klondike game finishing itself is won already. New game then, by N and Enter, keeps the streak and counts the win,
+// with no word of a loss, and no won panel comes up over the new deal. Left open while the cards go up, the sheet
+// then deals a game with the won panel put away.
+{
+  const c12 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const p12 = await c12.newPage();
+  const errors = [];
+  p12.on('pageerror', e => errors.push(e.message));
+  const ready = () => p12.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await p12.goto(base);
+  await ready();
+  // A real move, so the game counts, and a streak of 3 going in.
+  const finishing = async () => {
+    await p12.evaluate(() => window.patience.newGame('k1', 11705));
+    await p12.waitForTimeout(1500);
+    await ready();
+    await p12.click('.spot[data-pile="stock"]', { force: true });
+    await p12.waitForTimeout(400);
+    await ready();
+    await p12.evaluate(() => {
+      Object.assign(window.patience.stats.k1, { played: 10, won: 5, streak: 3, best: 3 });
+      // Every card face up in four runs from the king down to the 5: the rest goes up by itself.
+      const card = (suit, rank) => suit * 13 + rank - 1;
+      const run = (a, b) => ({ down: [], up: Array.from({ length: 9 }, (_, i) => card(i % 2 ? b : a, 13 - i)) });
+      window.patience.load({ v: 'k1', deal: 11705, draw: 1, stock: [], waste: [], fan: 0, moves: 120,
+        found: [0, 1, 2, 3].map(s => [1, 2, 3, 4].map(r => card(s, r))),
+        tab: [run(0, 1), run(1, 0), run(2, 3), run(3, 2), ...Array.from({ length: 3 }, () => ({ down: [], up: [] }))] }, 200000);
+    });
+  };
+  await finishing();
+  await p12.waitForTimeout(400);
+  assert.equal(await p12.evaluate(() => window.patience.state.found.flat().length < 52), true, 'still finishing');
+  await p12.keyboard.press('n');
+  assert.equal(await p12.isHidden('#new-note'), true, 'no word of a loss');
+  await p12.keyboard.press('Enter');
+  await p12.waitForTimeout(1500);
+  await ready();
+  await p12.waitForTimeout(1500);
+  let k1 = await p12.evaluate(() => window.patience.stats.k1);
+  assert.deepEqual([k1.played, k1.won, k1.streak, k1.best], [10, 6, 4, 4], 'the win counted, and the streak went on');
+  assert.equal(await p12.isHidden('#won'), true, 'no won panel over the new deal');
+  assert.equal((await p12.evaluate(() => window.patience.state)).moves, 0);
+
+  await finishing();
+  await p12.click('#b-new');
+  await p12.waitForSelector('#won:not([hidden])', { state: 'attached', timeout: 10000 });
+  assert.equal(await p12.isHidden('#sheet-new'), false, 'the sheet stays open while the game is won under it');
+  await p12.click('[data-v="k3"]');
+  await p12.waitForTimeout(1500);
+  await ready();
+  assert.equal(await p12.isHidden('#won'), true, 'no won panel over the new deal');
+  assert.match(await p12.textContent('#status'), /Klondike, draw three/);
+  assert.equal(await p12.locator('.card[style*="visibility: hidden"]').count(), 0, 'every card is on the table');
+  k1 = await p12.evaluate(() => window.patience.stats.k1);
+  assert.deepEqual([k1.won, k1.streak], [6, 4]);
+  assert.deepEqual(errors, []);
+  await c12.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
