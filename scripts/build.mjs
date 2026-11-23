@@ -38,7 +38,12 @@ const ofl = (await read('fonts/OFL.txt')).trim();
 if (ofl.includes('*/')) throw new Error('fonts/OFL.txt would end the comment it goes in');
 css = `/* The fonts in this page, Fraunces and Figtree, come with this licence:\n\n${ofl}\n*/\n${css}`;
 const icon = await dataUri('icon.svg', 'image/svg+xml');
-const html = (await read('index.html'))
+// A file, or a page inside another site, can't go on a home screen, so the menu doesn't say it can.
+const home = ' Add it to your home screen to keep it like an app.';
+const index = await read('index.html');
+if (!index.includes(home)) throw new Error(`build: expected to find ${JSON.stringify(home)} in the page`);
+const html = index
+  .replace(home, '')
   .replace(/ *<script src="carry\.js"><\/script>\n/, '') // only needed at the game's own address
   .replace(/ *<link rel="(manifest|apple-touch-icon|preload)"[^>]*>\n/g, '')
   .replaceAll('"icon.svg"', () => `"${icon}"`)

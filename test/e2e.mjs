@@ -2415,6 +2415,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     await p17.goto(file);
     await ready();
     assert.equal(await p17.locator('.card').count(), 52, 'the one-file copy deals');
+    assert.equal(await p17.evaluate(() => document.getElementById('sheet-menu').textContent.includes('home screen')), false, 'the one-file copy, which can\'t go on a home screen, doesn\'t say it can');
     await p17.click('.spot[data-pile="stock"]', { force: true });
     await ready();
     assert.equal((await p17.evaluate(() => window.patience.state)).moves, 1);

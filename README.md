@@ -14,7 +14,7 @@
 <p align="center">
   <img src="docs/phone-new.png" alt="The New game sheet: Klondike drawing one or three, FreeCell, and Spider with one, two or four suits, each with a line about how it plays" width="250">
   &nbsp;
-  <img src="docs/phone-won.png" alt="A won Klondike game: the cards bouncing off the foundations and leaving trails across the table, behind a panel saying You won, deal 52,817, in 4:41 and 161 moves, your fastest yet by 19 seconds, 18 won of 25" width="250">
+  <img src="docs/phone-won.png" alt="A won Klondike game: the cards bouncing off the foundations and leaving trails across the table, behind a panel saying You won, deal 52,817, in 4:41 and 161 moves, your fastest yet by 19 seconds, 18 won of 24 and a streak of 5" width="250">
 </p>
 
 ## How it plays
@@ -29,8 +29,8 @@
 - **Cards go up by themselves** in Klondike and FreeCell once nothing on the table could still need them, and when the rest is in order the game finishes itself. You can switch the first part off.
 - **The bouncing cards** when you win, as tradition requires.
 - **Your record** for each of the six ways of playing: games played, won, win rate, streak, best streak and fastest win.
-- **Settings:** four-colour suits (clubs green, diamonds blue), the deck on the left instead of under your right thumb, and hiding the time and moves.
-- **On a keyboard,** Space uses the deck, Z undoes, H gives a hint, Enter plays it and N starts a new game.
+- **Settings:** only deal games that can be won, send cards up by themselves, show the time and moves, four-colour suits (clubs green, diamonds blue), and the deck on the left instead of under your right thumb.
+- **On a keyboard,** Space uses the deck in Klondike and Spider, Z undoes, H gives a hint, Enter plays it and N opens New game (Enter there deals another of the same).
 - No ads, no account and no server. Your game, your record and your settings stay in your browser. It works offline and installs to a phone's home screen.
 
 ## Running it
@@ -38,7 +38,7 @@
 It's a static site: plain HTML, CSS and JavaScript, with no build step.
 
 ```sh
-npx serve .                       # or any static file server, then open the printed address
+npm start                         # or any static file server; then open http://localhost:8080
 npm install                       # once, for the bundler and the PNG compressor the screenshot and icon tools use
 npm test                          # the rules and the solvers in Node, then every game played in Chromium (needs Playwright)
 node tools/screenshots.mjs        # redraws docs/*.png and og.png (--check lists any that no longer match, changing nothing)

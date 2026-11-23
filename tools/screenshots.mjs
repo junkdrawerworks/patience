@@ -107,12 +107,17 @@ async function bounce(page, win, ms) {
   await page.click('#b-new');
   await page.waitForTimeout(400);
   await shot('phone-new');
-  await page.click('#sheet-new [data-close].plain');
+  await page.context().close();
+}
 
-  // Winning: the cards bounce for the same time every run (see bounce()).
-  await fresh('k1', 52817);
+// Winning: the cards bounce for the same time every run (see bounce()). On a page of its own, so the Klondike game
+// played above isn't left as a loss first, and the panel shows the streak going on from the record set in open().
+{
+  const page = await open({ width: 390, height: 844 }, 2);
+  await page.evaluate(() => window.patience.newGame('k1', 52817));
+  await page.waitForTimeout(2200);
   await bounce(page, () => page.evaluate(playInto, { v: 'k1', n: 52817, steps: 9999, ms: 281000 }), 4500);
-  await shot('phone-won');
+  await save(await page.screenshot(), 'docs/phone-won.png');
   await page.context().close();
 }
 
