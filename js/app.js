@@ -14,21 +14,24 @@ const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four:
 const blank = () => ({ played: 0, won: 0, streak: 0, best: 0, fastest: 0 });
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 
-const saved = read();
-// The first version only played Klondike, and kept the draw count where the way of playing now goes.
-if (saved.settings && !saved.settings.variant && saved.settings.draw) saved.settings.variant = 'k' + saved.settings.draw;
-if (saved.stats?.[1] || saved.stats?.[3]) { saved.stats.k1 ??= saved.stats[1]; saved.stats.k3 ??= saved.stats[3]; }
 const upgrade = s => (s && !s.v && s.draw ? { ...s, v: 'k' + s.draw } : s);
-if (saved.game) { saved.game.state = upgrade(saved.game.state); saved.game.history = (Array.isArray(saved.game.history) ? saved.game.history : []).filter(isObj).map(upgrade); }
-
-const settings = { ...DEFAULTS, ...saved.settings };
-delete settings.draw;
-if (!Object.keys(VARIANTS).includes(settings.variant)) settings.variant = 'k1';
+const settingsOf = saved => {
+  const s = { ...DEFAULTS, ...saved };
+  delete s.draw;
+  if (!Object.keys(VARIANTS).includes(s.variant)) s.variant = 'k1';
+  return s;
+};
 const record = r => Object.fromEntries(Object.entries(blank()).map(([k, zero]) => [k, Number.isFinite(r?.[k]) ? r[k] : zero]));
-const stats = Object.fromEntries(Object.keys(VARIANTS).map(v => [v, record(saved.stats?.[v])]));
 // The deal kept ready for each way of playing, by draw count in the first version.
-const kept = { k1: saved.next?.[1], k3: saved.next?.[3], ...saved.next };
-const ready = Object.fromEntries(Object.keys(VARIANTS).filter(v => Number.isInteger(kept[v]) && kept[v] > 0).map(v => [v, kept[v]]));
+const readyOf = next => {
+  const kept = { k1: next?.[1], k3: next?.[3], ...next };
+  return Object.fromEntries(Object.keys(VARIANTS).filter(v => Number.isInteger(kept[v]) && kept[v] > 0).map(v => [v, kept[v]]));
+};
+
+let lastWritten = stored(); // the save as this page last read or wrote it, to tell when another tab has saved since
+const saved = read(lastWritten);
+const settings = settingsOf(saved.settings);
+const stats = Object.fromEntries(Object.keys(VARIANTS).map(v => [v, record(saved.stats?.[v])]));
 
 let game = null;      // where the cards are now
 let history = [];     // where they were before each move, for Undo
@@ -64,7 +67,7 @@ const table = new Table($('table'), {
 // back gesture does to a finger picking up a card near the screen's side), is a slip: the game stays as it was.
 // A Back meant to leave still leaves.
 guardEdges({ surfaces: [table.el] });
-const dealer = new Dealer(ready, () => write());
+const dealer = new Dealer(readyOf(saved.next), () => write());
 
 // ---- playing ----
 
@@ -314,8 +317,9 @@ function showInfo() {
 setInterval(() => { if (game && since) $('time').textContent = clock(played()); }, 1000);
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { stopClock(); write(); }
-  else if (inPlay()) startClock();
+  if (document.hidden) { stopClock(); write(); return; }
+  adopt(); // in case this page was frozen while another one saved
+  if (inPlay()) startClock();
 });
 window.addEventListener('pagehide', () => { stopClock(); write(); });
 
@@ -338,12 +342,21 @@ function showStats(v) {
 
 // ---- saving ----
 
+function stored() {
+  try { return localStorage.getItem(KEY); } catch { return null; } // blocked
+}
+
 // What was saved, leaving out any part that isn't the shape this page writes (it never should be).
-function read() {
+// A game of null means none is being played: the last one was won.
+function read(text) {
   let s = null;
-  try { s = JSON.parse(localStorage.getItem(KEY)); } catch { /* none, or not readable */ }
+  try { s = JSON.parse(text); } catch { /* none, or not readable */ }
   if (!isObj(s)) return {};
-  for (const k of ['settings', 'stats', 'next', 'game']) if (!isObj(s[k])) delete s[k];
+  for (const k of ['settings', 'stats', 'next', 'game']) if (!isObj(s[k]) && !(k === 'game' && s[k] === null)) delete s[k];
+  // The first version only played Klondike, and kept the draw count where the way of playing now goes.
+  if (s.settings && !s.settings.variant && s.settings.draw) s.settings.variant = 'k' + s.settings.draw;
+  if (s.stats?.[1] || s.stats?.[3]) { s.stats.k1 ??= s.stats[1]; s.stats.k3 ??= s.stats[3]; }
+  if (s.game) { s.game.state = upgrade(s.game.state); s.game.history = (Array.isArray(s.game.history) ? s.game.history : []).filter(isObj).map(upgrade); }
   return s;
 }
 
@@ -352,9 +365,50 @@ function write() {
     // The whole undo list goes too, so Undo still goes all the way back after the page is closed. The last 2,000 moves
     // is more than a game takes, and keeps the save to about a megabyte even in Spider. A game won is left out.
     const g = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
-    localStorage.setItem(KEY, JSON.stringify({ settings, stats, next: dealer?.ready, game: g }));
+    const text = JSON.stringify({ settings, stats, next: dealer?.ready, game: g });
+    localStorage.setItem(KEY, text);
+    lastWritten = text;
   } catch { /* storage full or blocked */ }
 }
+
+// Another tab, or the installed app beside a browser tab, shares this save. When it saves, this page takes up what it
+// saved, so neither one writes its own old copy over the other's record or game: the record and the settings at once,
+// and the game once nothing is being dragged or dealt here. The other page having won the game this one shows, this
+// one's is won too, and isn't counted or played again.
+let adopting = 0;
+function adopt() {
+  clearTimeout(adopting);
+  const text = stored();
+  if (text === null || text === lastWritten) return;
+  const s = read(text);
+  for (const v of Object.keys(VARIANTS)) Object.assign(stats[v], record(s.stats?.[v]));
+  Object.assign(settings, settingsOf(s.settings));
+  apply();
+  for (const v of Object.keys(dealer.ready)) delete dealer.ready[v];
+  Object.assign(dealer.ready, readyOf(s.next));
+  if (!$('sheet-menu').hidden) showStats($('stats-for').value);
+  if (table.drag || (table.locked && $('won').hidden)) { adopting = setTimeout(adopt, 250); return; }
+  lastWritten = text;
+  if (s.game === null) {
+    if (!game || over()) return;
+    winCounted = true;
+    counted = false;
+    stopClock();
+    cancelChain();
+    table.clearHint();
+    showInfo();
+    return;
+  }
+  const g = playable(s.game);
+  if (!g || JSON.stringify(g.state) === JSON.stringify(game)) return;
+  cancelChain();
+  clearTimeout(landed);
+  closeWon();
+  closeSheets();
+  hideToast();
+  take(g);
+}
+window.addEventListener('storage', e => { if (e.key === KEY) adopt(); });
 
 // ---- settings ----
 
@@ -482,19 +536,35 @@ if ('serviceWorker' in navigator && !('single' in document.documentElement.datas
 apply();
 if (!resume(saved.game)) newGame(settings.variant);
 
-// Carry on with a saved game, if there's one that can be played. A saved game that can't (it never should be)
-// is dropped, and a new one dealt, keeping the settings and the record.
-function resume(g) {
+// A saved game, if it's one that can be played: { state, history, elapsed, counted }, or null.
+function playable(g) {
   const s = g?.state;
   try {
-    if (!isObj(s) || !VARIANTS[s.v] || gameOf(s).won(s)) return false;
-    game = s;
-    history = g.history;
-    elapsed = Number.isFinite(g.elapsed) ? g.elapsed : 0;
-    counted = !!g.counted;
-    winCounted = false;
-    table.render(game, { still: true });
-    showInfo();
+    if (!isObj(s) || !Object.hasOwn(VARIANTS, s.v) || gameOf(s).won(s)) return null;
+  } catch { return null; }
+  return { state: s, history: g.history, elapsed: Number.isFinite(g.elapsed) ? g.elapsed : 0, counted: !!g.counted };
+}
+
+// Put a saved game on the table, as it was.
+function take(g) {
+  game = g.state;
+  history = g.history;
+  elapsed = g.elapsed;
+  since = 0;
+  counted = g.counted;
+  winCounted = false;
+  table.locked = false;
+  table.render(game, { still: true });
+  showInfo();
+}
+
+// Carry on with a saved game, if there's one that can be played. A saved game that can't (it never should be)
+// is dropped, and a new one dealt, keeping the settings and the record.
+function resume(kept) {
+  const g = playable(kept);
+  if (!g) return false;
+  try {
+    take(g);
     after();
   } catch {
     cancelChain();

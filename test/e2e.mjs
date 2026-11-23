@@ -852,6 +852,63 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   await c12.close();
 }
 
+// Two tabs (or the installed app beside a browser tab) share one save. Each takes up what the other saves, so a win in
+// one isn't lost when the other moves, and each shows the game the other left.
+{
+  const c13 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const [a, b] = [await c13.newPage(), await c13.newPage()];
+  const errors = [];
+  for (const p of [a, b]) p.on('pageerror', e => errors.push(e.message));
+  const ready = p => p.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = p => p.evaluate(() => JSON.stringify(window.patience.state));
+  const same = async why => {
+    for (let i = 0; (await now(a)) !== (await now(b)); i++) { assert.ok(i < 40, why); await a.waitForTimeout(50); }
+  };
+  await a.goto(base);
+  await ready(a);
+  await a.evaluate(() => window.patience.newGame('k1', 11705));
+  await a.waitForTimeout(1500);
+  await ready(a);
+  await b.goto(base);
+  await ready(b);
+  await a.click('.spot[data-pile="stock"]', { force: true });
+  await ready(a);
+  await same('B shows the move made in A');
+  // A wins: every card up but the king of spades, the last card on the waste.
+  const before = await a.evaluate(() => ({ ...window.patience.stats.k1 }));
+  await a.evaluate(() => {
+    window.patience.settings.auto = false;
+    window.patience.load({
+      v: 'k1', deal: 11705, draw: 1, stock: [], waste: [51], fan: 0, moves: 150,
+      found: [0, 1, 2, 3].map(suit => Array.from({ length: suit === 3 ? 12 : 13 }, (_, r) => suit * 13 + r)),
+      tab: Array.from({ length: 7 }, () => ({ down: [], up: [] })),
+    });
+  });
+  await a.click('.card[data-c="51"]', { position: { x: 12, y: 10 } });
+  await a.waitForSelector('#won:not([hidden])');
+  await b.waitForTimeout(200);
+  assert.equal(await b.evaluate(() => window.patience.stats.k1.won), before.won + 1, "B has A's win in its record");
+  // The game B shows was won in A: leaving it now is no loss, and the streak stays.
+  await b.click('#b-new');
+  assert.equal(await b.isHidden('#new-note'), true, 'no loss for a game won in the other tab');
+  await b.keyboard.press('Escape');
+  // A deals again, and B makes a move in the new game: A's win stays in the record, and A shows B's move.
+  await a.mouse.click(30, 300);
+  await a.click('#b-again');
+  await a.waitForTimeout(1500);
+  await ready(a);
+  await same("B shows A's new deal");
+  await ready(b);
+  await b.click('.spot[data-pile="stock"]', { force: true });
+  await ready(b);
+  await same("A shows B's move");
+  const k1 = await a.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).stats.k1);
+  assert.deepEqual([k1.won, k1.streak], [before.won + 1, before.streak + 1], "A's win is still in the record");
+  assert.equal(await b.evaluate(() => window.patience.state.moves), 1);
+  assert.deepEqual(errors, []);
+  await c13.close();
+}
+
 // Offline, checked the junkdrawer house kit's way, from a server that answers like GitHub Pages: a browser may keep
 // each file for ten minutes, and asks again by its ETag. `net` is the connection: 'up', 'down' (the server drops every
 // connection) or 'stalled' (a plane's or a train's wifi: it takes each request and holds on to it). With `release`
