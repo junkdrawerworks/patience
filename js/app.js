@@ -37,6 +37,11 @@ const settings = settingsOf(saved.settings);
 const stats = Object.fromEntries(Object.keys(VARIANTS).map(v => [v, record(saved.stats?.[v])]));
 // The games this phone has said its first word on (see firstWord()): 'klondike', 'freecell', 'spider'.
 const introduced = new Set(Array.isArray(saved.introduced) ? saved.introduced.filter(g => typeof g === 'string') : []);
+// This save's own name, made up the first time, which goes in a copy of the record so the copy isn't brought back
+// here, and the names of the copies brought back already, so none is added twice (see bringBack()).
+const newName = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('');
+let saveName = typeof saved.name === 'string' ? saved.name : newName();
+const brought = new Set(Array.isArray(saved.brought) ? saved.brought.filter(x => typeof x === 'string') : []);
 // The game waiting for each other way of playing, put aside to play another (see newGame()), by way of playing:
 // { state, history, elapsed, counted }, as saved. The game on the table isn't in it.
 const waiting = {};
@@ -616,6 +621,7 @@ function read(text) {
   if (!isObj(s)) return {};
   for (const k of ['settings', 'stats', 'next', 'games']) if (!isObj(s[k])) delete s[k];
   if (!Array.isArray(s.introduced)) delete s.introduced;
+  if (!Array.isArray(s.brought)) delete s.brought;
   // The first version only played Klondike, and kept the draw count where the way of playing now goes.
   if (s.settings && !s.settings.variant && s.settings.draw) s.settings.variant = 'k' + s.settings.draw;
   if (s.stats?.[1] || s.stats?.[3]) { s.stats.k1 ??= s.stats[1]; s.stats.k3 ??= s.stats[3]; }
@@ -641,7 +647,7 @@ function write() {
     const now = game && !over() ? { state: game, history: history.slice(-2000), elapsed: played(), counted } : null;
     const games = Object.entries(waiting).filter(([v]) => v !== game?.v);
     if (now) games.push([game.v, now]);
-    const head = JSON.stringify({ settings, stats, next: dealer?.kept(), introduced: [...introduced] }).slice(0, -1);
+    const head = JSON.stringify({ settings, stats, next: dealer?.kept(), introduced: [...introduced], name: saveName, brought: [...brought] }).slice(0, -1);
     // `cut`: the games whose Undo history is cut to its last 200 moves.
     const build = (cut = () => false) => `${head},"games":{${games.map(([v, g]) =>
       `${JSON.stringify(v)}:${cut(v) && g.history.length > 200 ? JSON.stringify({ ...g, history: g.history.slice(-200) }) : g === now ? JSON.stringify(g) : textOf(g)}`).join(',')}}}`;
@@ -690,6 +696,8 @@ function adopt() {
   for (const v of Object.keys(VARIANTS)) Object.assign(stats[v], record(s.stats?.[v]));
   Object.assign(settings, settingsOf(s.settings));
   for (const g of s.introduced ?? []) if (typeof g === 'string') introduced.add(g);
+  for (const x of s.brought ?? []) if (typeof x === 'string') brought.add(x);
+  if (typeof s.name === 'string') saveName = s.name;
   apply();
   dealer.load(s.next);
   if (!$('sheet-menu').hidden) showStats($('stats-for').value);
@@ -724,6 +732,62 @@ function adopt() {
   take(g);
 }
 window.addEventListener('storage', e => { if (e.key === KEY) adopt(); });
+
+// ---- a copy of the record, to keep or take to another phone ----
+
+// The file: { patience: 'record', version: 1, saved (when, as an ISO date), from (the save it came from), settings,
+// stats (by way of playing, as the save keeps them) }. A later version of Patience still reads version 1.
+const RECORD_VERSION = 1;
+$('b-save').addEventListener('click', () => {
+  const when = new Date();
+  const copy = { patience: 'record', version: RECORD_VERSION, saved: when.toISOString(), from: saveName, settings, stats };
+  const day = [when.getFullYear(), when.getMonth() + 1, when.getDate()].map(n => String(n).padStart(2, '0')).join('-');
+  const name = `patience-record-${day}.json`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(copy, null, 1)], { type: 'application/json' }));
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  $('keep-says').textContent = `Saved as ${name}. Keep it somewhere safe, and bring it back here or on another phone.`;
+});
+$('b-bring').addEventListener('click', () => $('f-bring').click());
+$('f-bring').addEventListener('change', async e => {
+  const file = e.target.files?.[0];
+  e.target.value = ''; // so the same file can be chosen again
+  if (!file) return;
+  let copy = null;
+  try { copy = JSON.parse(await file.text()); } catch { /* not a record */ }
+  $('keep-says').textContent = bringBack(copy);
+  if (!$('sheet-menu').hidden) showStats($('stats-for').value);
+});
+
+// Add a copy of a record to this one: games played and won added together, the best streak, fastest and fewest
+// moves the better of the two, and the streak the longer. Its settings come back too. Says what happened.
+function bringBack(copy) {
+  if (!isObj(copy) || copy.patience !== 'record' || !Number.isInteger(copy.version) || !isObj(copy.stats)) return 'That isn’t a copy of a Patience record.';
+  if (copy.version > RECORD_VERSION) return 'That record was saved by a newer Patience. Reload this page to bring it back.';
+  if (copy.from === saveName) return 'That’s this phone’s own record. It’s here already.';
+  if (typeof copy.from === 'string' && brought.has(copy.from)) return 'A record from that phone is here already.';
+  for (const v of Object.keys(VARIANTS)) {
+    const st = stats[v], r = record(copy.stats[v]);
+    st.played += r.played;
+    st.won += Math.min(r.won, r.played);
+    st.streak = Math.max(st.streak, r.streak);
+    st.best = Math.max(st.best, r.best, st.streak);
+    for (const k of ['fastest', 'fewest']) st[k] = st[k] && r[k] ? Math.min(st[k], r[k]) : st[k] || r[k];
+  }
+  if (isObj(copy.settings)) {
+    Object.assign(settings, settingsOf({ ...settings, ...copy.settings, variant: settings.variant }));
+    apply();
+  }
+  if (typeof copy.from === 'string') brought.add(copy.from);
+  write();
+  const when = new Date(copy.saved);
+  const day = Number.isNaN(when.getTime()) ? '' : ` from ${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  return `Your record${day} is added to this one, and its settings are back.`;
+}
 
 // ---- settings ----
 

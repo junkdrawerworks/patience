@@ -728,6 +728,11 @@ button { font: inherit; color: inherit; }
 .howto li { margin: 4px 0; }
 kbd { font: 600 12px var(--font); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); background: var(--line); }
 .small { font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+/* Save a copy of your record and Bring back a record, with what they did said under them. */
+.keep { display: flex; flex-wrap: wrap; column-gap: 12px; row-gap: 4px; margin-top: -4px; }
+.keep .small-plain { margin: 0 0 0 -10px; }
+.keep p { flex-basis: 100%; margin: 4px 0 0; }
+.keep p:empty { display: none; }
 
 .jd-foot {
   margin-top: 20px;

@@ -152,6 +152,12 @@
         <p class="small">In every game, tap a card to send it to the best place, or drag it where you want it. Hint lights up a card and where it goes: tap either one and the move is played. On a keyboard: <kbd>Space</kbd> uses the deck in Klondike and Spider, <kbd>Z</kbd> undoes, <kbd>H</kbd> gives a hint, <kbd>Enter</kbd> plays it and <kbd>N</kbd> opens New game (<kbd>Enter</kbd> there deals another of the same).</p>
       </div>
       <p class="small">No ads, no account. Your games and your record stay on this device, and once it has loaded it works with no signal. Add it to your home screen to keep it like an app.</p>
+      <div class="keep">
+        <button type="button" class="small-plain" id="b-save">Save a copy of your record</button>
+        <button type="button" class="small-plain" id="b-bring">Bring back a record</button>
+        <input type="file" id="f-bring" accept=".json,application/json" hidden>
+        <p class="small" id="keep-says" role="status"></p>
+      </div>
 
       <footer class="jd-foot">
         <a href="https://junkdrawer.works/">Part of junkdrawer.works</a>

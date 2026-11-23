@@ -1842,6 +1842,66 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cc.close();
 }
 
+// Save a copy of your record writes a small file of the record and the settings, and Bring back a record, on another
+// phone, adds it to the record there and brings the settings back. A copy isn't brought back twice, nor onto the phone
+// it came from, and a file that isn't a record changes nothing.
+{
+  const seed = save => () => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('patience.v1', JSON.stringify(save));
+  };
+  const open = async save => {
+    const cx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block', acceptDownloads: true });
+    const px = await cx.newPage();
+    await px.addInitScript(`(${seed.toString()})(${JSON.stringify(save)})()`);
+    await px.goto(base);
+    await px.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+    return [cx, px];
+  };
+  const [ca, a] = await open({ introduced: ['klondike', 'freecell', 'spider'], settings: { four: true, left: true, look: 'dark' }, stats: {
+    k1: { played: 30, won: 20, streak: 3, best: 6, fastest: 200000, fewest: 95 },
+    s4: { played: 4, won: 1, streak: 0, best: 1, fastest: 900000, fewest: 400 },
+  } });
+  await a.click('#b-menu');
+  const [download] = await Promise.all([a.waitForEvent('download'), a.click('#b-save')]);
+  assert.match(download.suggestedFilename(), /^patience-record-\d{4}-\d\d-\d\d\.json$/);
+  const path = await download.path();
+  const copy = JSON.parse(await readFile(path, 'utf8'));
+  assert.deepEqual([copy.patience, copy.version, copy.stats.k1.won, copy.settings.four], ['record', 1, 20, true]);
+  assert.match(await a.textContent('#keep-says'), /^Saved as patience-record-/);
+  await a.setInputFiles('#f-bring', path);
+  await a.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('That’s'));
+  assert.equal(await a.evaluate(() => window.patience.stats.k1.played), 30, 'not onto the phone it came from');
+
+  const [cb, b] = await open({ introduced: ['klondike', 'freecell', 'spider'], stats: { k1: { played: 5, won: 2, streak: 5, best: 5, fastest: 150000, fewest: 0 } } });
+  await b.click('#b-menu');
+  await b.setInputFiles('#f-bring', path);
+  await b.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('Your record'));
+  assert.match(await b.textContent('#keep-says'), /^Your record from \d+ \w+ \d{4} is added to this one, and its settings are back\.$/);
+  assert.deepEqual(await b.evaluate(() => window.patience.stats.k1), { played: 35, won: 22, streak: 5, best: 6, fastest: 150000, fewest: 95 }, 'added together');
+  assert.deepEqual(await b.evaluate(() => window.patience.stats.s4), copy.stats.s4);
+  assert.equal(await b.evaluate(() => document.querySelector('#stats div dd').textContent), '35', 'the tiles show it');
+  assert.deepEqual(await b.evaluate(() => [window.patience.settings.four, window.patience.settings.left, document.documentElement.dataset.theme]), [true, true, 'dark'], 'the settings came back');
+  assert.equal(await b.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).stats.k1.played), 35, 'and saved');
+  await b.setInputFiles('#f-bring', path);
+  await b.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('A record from that phone'));
+  assert.equal(await b.evaluate(() => window.patience.stats.k1.played), 35, 'not added twice');
+  await b.reload();
+  await b.waitForFunction(() => window.patience?.state, null, { timeout: 15000 });
+  await b.click('#b-menu');
+  await b.setInputFiles('#f-bring', path);
+  await b.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('A record from that phone'));
+  assert.equal(await b.evaluate(() => window.patience.stats.k1.played), 35, 'nor after a reload');
+  await b.setInputFiles('#f-bring', { name: 'notes.json', mimeType: 'application/json', buffer: Buffer.from('{"hello": 1}') });
+  await b.waitForFunction(() => document.getElementById('keep-says').textContent === 'That isn’t a copy of a Patience record.');
+  await b.setInputFiles('#f-bring', { name: 'later.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...copy, version: 2, from: 'elsewhere' })) });
+  await b.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('That record was saved by a newer Patience'));
+  assert.equal(await b.evaluate(() => window.patience.stats.k1.played), 35, 'changing nothing');
+  await ca.close();
+  await cb.close();
+}
+
 // Two tabs on different ways of playing: each follows the other, onto the game it carries on with, and the game it
 // leaves waits, with nothing counted twice.
 {
