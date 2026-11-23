@@ -112,8 +112,8 @@ export const freecell = {
   stock: () => null,
   stockNote: () => null,
 
-  // A tap sends a card up if it can go, otherwise onto a column (one with cards first),
-  // otherwise into a free cell.
+  // A tap sends a card up if it can go, otherwise onto a card it fits, otherwise into an empty column. A single card
+  // tapped from a column tries a free cell before an empty column, keeping the empty column for a run.
   tapTarget(s, from, n) {
     const cards = freecell.lift(s, from, freecell.pile(s, from).up.length - n);
     if (!cards) return null;
@@ -123,9 +123,9 @@ export const freecell = {
     const cols = T.map((id, i) => ({ id, i, empty: !s.tab[i].length }))
       .filter(x => x.id !== from && !(x.empty && whole) && freecell.canDrop(s, cards, x.id))
       .sort((a, b) => (a.empty - b.empty) || ((a.i - start + 8) % 8) - ((b.i - start + 8) % 8));
-    if (cols.length) return cols[0].id;
+    if (cols.length && !cols[0].empty) return cols[0].id;
     if (n === 1 && from[0] === 't') { const i = s.cells.indexOf(null); if (i >= 0) return C[i]; }
-    return null;
+    return cols.length ? cols[0].id : null;
   },
 
   autoStep(s) {

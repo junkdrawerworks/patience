@@ -100,6 +100,21 @@ test('a FreeCell tap sends a card up, then onto a column, then into a free cell'
   assert.equal(freecell.lift(up, 'f0', 0), null, 'cards on the foundations stay up');
 });
 
+test('a single FreeCell card tapped from a column tries a free cell before an empty column; runs and free-cell cards still take the column', () => {
+  const s = emptyFC();
+  s.tab[0] = [card(S, 13), card(H, 8), card(C, 7)];
+  s.tab[1] = [card(S, 2), card(D, 4)];
+  for (let i = 2; i < 7; i++) s.tab[i] = [card(i % 4, 12)];
+  s.cells[0] = card(H, 3);
+  assert.equal(freecell.tapTarget(s, 't1', 1), 'c1', 'the 4 of diamonds into a free cell, leaving the empty column');
+  assert.equal(freecell.tapTarget(s, 't0', 2), 't7', 'the 8 and 7 together into the empty column');
+  assert.equal(freecell.tapTarget(s, 'c0', 1), 't7', 'the 3 of hearts from its free cell into the empty column');
+  const full = { ...s, cells: [card(H, 3), card(H, 6), card(H, 9), card(H, 11)] };
+  assert.equal(freecell.tapTarget(full, 't1', 1), 't7', 'with every free cell full, the empty column');
+  const onCard = { ...s, tab: s.tab.map((t, i) => (i === 2 ? [card(S, 5)] : t)) };
+  assert.equal(freecell.tapTarget(onCard, 't1', 1), 't2', 'a card it fits still comes before a free cell');
+});
+
 test("FreeCell's solver wins are real wins, and deal 11982 can't be won", () => {
   let wins = 0;
   for (let n = 1; n <= 15; n++) {

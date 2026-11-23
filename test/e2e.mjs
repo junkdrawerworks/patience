@@ -1605,7 +1605,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   }
 
   // A press where a card is landing is for that card, not the one it's landing on. FreeCell: the 7 of hearts goes onto
-  // the 8 of spades, and a tap there straight after sends the 7 on to the only empty column, leaving the 8 where it is.
+  // the 8 of spades, and a tap there straight after sends the 7 on to a free cell, leaving the 8 where it is.
   await pf.evaluate(() => {
     const card = (suit, rank) => suit * 13 + rank - 1;
     window.patience.load({ v: 'fc', deal: 617, cells: [null, null, null, null], found: [[], [], [], []], moves: 3,
@@ -1618,8 +1618,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pf.touchscreen.tap(eight.x + eight.width / 2, eight.y + eight.height * 0.36 + eight.height * 0.3);
   await pf.waitForTimeout(400);
   await ready();
-  const on = await pf.evaluate(() => [window.patience.state.moves, ...window.patience.state.tab.slice(0, 3).map(t => t.join(' '))]);
-  assert.deepEqual(on, [5, '38 7', '12 21', '19'], 'the 7 of hearts went on to the empty column, and the 8 of spades stayed');
+  const on = await pf.evaluate(() => [window.patience.state.moves, ...window.patience.state.tab.slice(0, 3).map(t => t.join(' ')), window.patience.state.cells[0]]);
+  assert.deepEqual(on, [5, '38 7', '12 21', '', 19], 'the 7 of hearts went on to a free cell, and the 8 of spades stayed');
 
   // FreeCell, every column in order, so the game finishes itself.
   const under = await pf.evaluate(async () => {
