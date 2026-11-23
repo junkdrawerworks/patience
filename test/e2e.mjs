@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, dirname, extname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { playInto } from '../dev/play.mjs';
 
@@ -343,15 +343,16 @@ await page.emulateMedia({ colorScheme: 'light' });
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
-// Works offline once it has been opened.
+assert.deepEqual(problems, [], 'problems while playing');
+
+// Works offline once it has been opened. (Offline, the browser's own requests can fail, and that's no problem.)
 await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 }).catch(() => {});
 await ctx.setOffline(true);
 await page.reload();
 await settled();
 assert.equal(await page.locator('.card').count(), 104, 'the Spider game did not load offline');
 await ctx.setOffline(false);
-
-assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems while playing');
+assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems offline');
 // A phone with the first version's game and record on it carries both over.
 {
   const old = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
@@ -1050,15 +1051,28 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   const page = await ctx.newPage();
   const problems = [];
   page.on('pageerror', e => problems.push(e.message));
+  // Every file the page asks for on its first visit is one the offline copy keeps.
+  const sw = await readFile(join(root, 'sw.js'), 'utf8');
+  const shell = [...sw.match(/SHELL = \[([^\]]*)\]/)[1].replace(/\/\/.*/g, '').matchAll(/'([^']*)'/g)].map(m => m[1]);
+  const asked = new Set();
+  page.on('request', r => { if (r.url().startsWith(base)) asked.add(r.url().slice(base.length) || './'); });
   await page.goto(base);
   await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 15000 });
+  await page.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  assert.ok(asked.has('js/app.js') && asked.has('js/games/spider.js'), 'every file the page loads is seen');
+  assert.deepEqual([...asked].filter(f => !shell.includes(f)), [], 'files the page loads that the offline copy leaves out');
   const title = await page.title();
+  const dealt = () => page.waitForFunction(() => window.patience?.state && document.querySelectorAll('.card').length === 52, null, { timeout: 15000 });
 
-  // Works offline once it has been opened.
+  // Works offline once it has been opened, and deals a game there.
   net = 'down';
   await ctx.setOffline(true);
   await page.reload();
   assert.equal(await page.title(), title, 'the page did not open offline');
+  await dealt();
+  await page.evaluate(() => window.patience.newGame('fc'));
+  await page.waitForFunction(() => window.patience.state.v === 'fc' && !window.patience.busy, null, { timeout: 15000 });
+  await dealt();
   await ctx.setOffline(false);
 
   // On a connection that's up but not answering, it opens from the copy too, after the worker's few seconds' wait for
@@ -1069,6 +1083,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   const took = Date.now() - t0;
   assert.ok(took < 8000, `the page took ${took} ms to open on a stalled connection`);
   assert.equal(await page.title(), title, 'the page did not open on a stalled connection');
+  await dealt();
   net = 'up';
   for (const [req, res] of held.splice(0)) serve(req, res);
 
@@ -1087,12 +1102,49 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems w
   // sw.js changes whenever a file it keeps does, so a release replaces the whole offline copy at once: FILES in sw.js
   // is a fingerprint of every file in SHELL (sha1 of each, in the list's order, an address like './' read as its
   // index.html; the first 8 hex of the sha1 of those).
-  const sw = await readFile(join(root, 'sw.js'), 'utf8');
-  const shell = [...sw.match(/SHELL = \[([^\]]*)\]/)[1].replace(/\/\/.*/g, '').matchAll(/'([^']*)'/g)].map(m => m[1]);
   const all = createHash('sha1');
   for (const f of shell) all.update(createHash('sha1').update(await readFile(join(root, f.endsWith('/') ? f + 'index.html' : f))).digest());
   const files = all.digest('hex').slice(0, 8);
   assert.equal(sw.match(/const FILES = '([0-9a-f]*)'/)?.[1], files, `a file sw.js keeps for offline has changed: set FILES in sw.js to '${files}'`);
+}
+
+// The one-file copy (npm run build) plays by itself, opened straight from the disk: no errors, and no file asked for
+// beyond itself.
+{
+  let built = true;
+  try {
+    execSync('node scripts/build.mjs', { cwd: root, stdio: 'pipe' });
+  } catch (e) {
+    if (!/esbuild/.test(e.stderr)) throw e;
+    built = false;
+    console.log('(esbuild is not installed, so the one-file copy was not checked: npm install, then npm test again)');
+  }
+  if (built) {
+    const c17 = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    const p17 = await c17.newPage();
+    const file = pathToFileURL(join(root, 'dist/patience.html')).href;
+    const trouble = [];
+    p17.on('pageerror', e => trouble.push(e.message));
+    p17.on('console', m => { if (m.type() === 'error') trouble.push(m.text()); });
+    p17.on('request', r => { if (r.url() !== file && !r.url().startsWith('data:')) trouble.push('asked for ' + r.url()); });
+    const ready = () => p17.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 20000 });
+    await p17.goto(file);
+    await ready();
+    assert.equal(await p17.locator('.card').count(), 52, 'the one-file copy deals');
+    await p17.click('.spot[data-pile="stock"]', { force: true });
+    await ready();
+    assert.equal((await p17.evaluate(() => window.patience.state)).moves, 1);
+    await p17.evaluate(() => window.patience.newGame('fc', 617));
+    await p17.waitForTimeout(1500);
+    await ready();
+    await p17.keyboard.press('h');
+    await p17.waitForSelector('.hint', { timeout: 20000 });
+    await p17.keyboard.press('Enter');
+    await ready();
+    assert.deepEqual(await p17.evaluate(() => [window.patience.state.v, window.patience.state.moves]), ['fc', 1], 'and plays FreeCell too');
+    assert.deepEqual(trouble, [], 'problems in the one-file copy');
+    await c17.close();
+  }
 }
 
 await browser.close();
