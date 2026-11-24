@@ -2089,6 +2089,64 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cn.close();
 }
 
+// A game waiting that Today's deal or a deal by number would end, with a move made in it, gets the note at the top of
+// the New game sheet first, since ending it counts as a loss: not for one that Today's deal carries on with, nor for a
+// number its game hasn't a deal of, nor once the field is empty again. The game on the table, part way, keeps its own note.
+{
+  const cw = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const pw2 = await cw.newPage();
+  const ready = () => pw2.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const note = async () => (await pw2.isHidden('#new-note')) ? '' : pw2.textContent('#new-note');
+  const WAITING = 'A new deal counts a game you\'re part way through as a loss, the one on the table or one waiting.';
+  const TABLE = "A new deal of this game counts the one you're in as a loss. Starting this deal again doesn't.";
+  const move = async () => {
+    await pw2.click('#b-hint');
+    await pw2.waitForSelector('.hint', { timeout: 15000 });
+    await pw2.keyboard.press('Enter');
+    await ready();
+  };
+  const deal = async (v, n) => { await pw2.evaluate(([v, n]) => window.patience.newGame(v, n), [v, n]); await pw2.waitForTimeout(1500); await ready(); };
+  await pw2.goto(base);
+  await ready();
+  await pw2.click('#b-new');
+  await pw2.click('#b-today');
+  await pw2.click('[data-v="fc"]');
+  await pw2.waitForTimeout(1500);
+  await ready();
+  await move();
+  await deal('k1', 11705);
+  await pw2.click('#b-new');
+  assert.equal(await note(), '', 'nothing part way on the table, and nothing chosen that ends the game waiting');
+  await pw2.click('#b-today');
+  assert.equal(await pw2.textContent('[data-v="fc"] .waits'), 'Carry on');
+  assert.equal(await note(), '', 'today’s FreeCell waiting is carried on with, not ended');
+  await pw2.click('#b-number');
+  await pw2.fill('#deal-n', '617');
+  assert.equal(await note(), WAITING, 'deal 617 would end the FreeCell game waiting');
+  await pw2.fill('#deal-n', '50000');
+  assert.equal(await note(), '', 'FreeCell has no deal 50,000, so its game waits on');
+  await pw2.fill('#deal-n', '');
+  assert.equal(await note(), '');
+  await pw2.keyboard.press('Escape');
+  await move();
+  await deal('s2', 5);
+  await pw2.click('#b-new');
+  assert.equal(await note(), '', 'Draw one and FreeCell wait, and nothing chosen ends them');
+  await pw2.click('#b-today');
+  assert.equal(await pw2.textContent('[data-v="k1"] .waits'), 'Today’s deal');
+  assert.equal(await note(), WAITING, 'today’s Draw one would end the Draw one game waiting');
+  await pw2.click('#b-today');
+  assert.equal(await note(), '');
+  await pw2.keyboard.press('Escape');
+  await move();
+  await pw2.click('#b-new');
+  assert.equal(await note(), TABLE, 'the game on the table, part way, has its own note');
+  await pw2.click('#b-number');
+  await pw2.fill('#deal-n', '617');
+  assert.equal(await note(), WAITING);
+  await cw.close();
+}
+
 // Today's deal, pressed in the New game sheet, makes each game's button play today's deal of it: the same on every phone,
 // from the list made in advance, so it's dealt at once. The deal's name says so. Won, the record has its time and the
 // days in a row (one more, won yesterday too), and the won panel says so; a way of playing last won days ago has none in

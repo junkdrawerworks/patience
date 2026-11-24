@@ -932,7 +932,6 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 
 function openNew() {
   hideToast();
-  $('new-note').hidden = !inPlay();
   showToday(false);
   showNumber(false);
   $('b-restart').hidden = !game || !game.moves;
@@ -952,9 +951,17 @@ const askedFor = () => Number($('deal-n').value.replace(/\D/g, '').slice(0, 9)) 
 const fmt = n => n.toLocaleString('en-US');
 // Under each game's name in the sheet: with Today's deal pressed, how today's deal of it stands; the deal a number typed
 // would play (or how high its deals go, if it hasn't one so high); or else Carry on, for another way of playing with a
-// game waiting.
+// game waiting. The note at the top says when a new deal would count a game as a loss: the one on the table, if it's
+// part way, or, while Today's deal is pressed or a number is typed, a game waiting that its button would end.
+const NOTE_TABLE = 'A new deal of this game counts the one you\'re in as a loss. Starting this deal again doesn\'t.';
+const NOTE_WAITING = 'A new deal counts a game you\'re part way through as a loss, the one on the table or one waiting.';
 function showChoices() {
-  const n = askedFor();
+  const n = askedFor(), day = dayOf();
+  const ends = v => v !== game?.v && !!waiting[v]?.counted
+    && (todayOn ? waiting[v].state.daily !== day : n > 0 && n <= VARIANTS[v].game.lastDeal);
+  const waitingLost = Object.keys(VARIANTS).some(ends);
+  $('new-note').hidden = !waitingLost && !inPlay();
+  $('new-note').textContent = waitingLost ? NOTE_WAITING : NOTE_TABLE;
   document.querySelectorAll('[data-v]').forEach(b => {
     const v = b.dataset.v, last = VARIANTS[v].game.lastDeal;
     b.querySelector('.waits')?.remove();
