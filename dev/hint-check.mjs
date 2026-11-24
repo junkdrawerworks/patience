@@ -2,15 +2,18 @@
 // themselves (or not), and again, until the game is won. Counts the games won, and any that end with "no way to win",
 // a move the table refuses, Hint leading back to a table it has already been at (round in circles for good), or the
 // game saying no move can help at a table on the way to a win.
-//   node dev/hint-check.mjs [k1|k3|fc|s1|s2|s4] [deals] [on|off] [first deal|list]
+//   node dev/hint-check.mjs [k1|k3|fc|s1|s2|s4] [deals] [on|off] [first deal|list|daily]
 // Deals are the ones the game would hand out from the first deal number on: those its solver wins within its limit.
-// With `list`, the deals checked in advance for that way instead (js/games/ready-deals.js), the first of them.
+// With `list`, the deals checked in advance for that way instead (js/games/ready-deals.js), the first of them; with
+// `daily`, Today's deals (js/games/daily-deals.js), from the first day.
 import { VARIANTS } from '../js/games/index.js';
 import { READY_DEALS } from '../js/games/ready-deals.js';
+import { DAILY_DEALS } from '../js/games/daily-deals.js';
 import { hintFor } from '../js/deals.js';
 
-const V = process.argv[2] || 'k1', AUTO = process.argv[4] !== 'off', LIST = process.argv[5] === 'list';
-const N = Math.min(+(process.argv[3] || 30), LIST ? READY_DEALS[V].length : Infinity), FIRST = LIST ? 0 : +(process.argv[5] || 1);
+const V = process.argv[2] || 'k1', AUTO = process.argv[4] !== 'off';
+const LIST = { list: READY_DEALS, daily: DAILY_DEALS }[process.argv[5]]?.[V];
+const N = Math.min(+(process.argv[3] || 30), LIST ? LIST.length : Infinity), FIRST = LIST ? 0 : +(process.argv[5] || 1);
 const game = VARIANTS[V].game;
 const where = s => JSON.stringify(s, (k, x) => (k === 'moves' || k === 'fan' ? undefined : x));
 const settle = s => {
@@ -22,7 +25,7 @@ const settle = s => {
 const tally = { won: 0, lost: 0, refused: 0, circles: 0, unfinished: 0, 'said out of moves': 0 };
 let presses = 0, slowest = 0, slowestOut = 0;
 for (let k = FIRST, played = 0; played < N; k++) {
-  const n = LIST ? READY_DEALS[V][k] : k;
+  const n = LIST ? LIST[k] : k;
   const check = game.search(game.deal(n, V));
   if (check.run(game.budget.deal) !== 'won') { if (LIST) { played++; tally.unchecked = (tally.unchecked ?? 0) + 1; console.log(`deal ${n}: not won by the solver`); } continue; }
   played++;
