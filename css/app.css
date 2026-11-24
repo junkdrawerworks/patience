@@ -309,7 +309,7 @@ button { font: inherit; color: inherit; }
   inset: 0;
   display: grid;
   place-items: center;
-  font: 700 calc(var(--cw) * 0.17) / 1 var(--font);
+  font: 700 calc(var(--cw) * 0.23) / 1 var(--font);
 }
 /* Pyramid's places are only where its cards sit: an empty one shows nothing. */
 .spot[data-kind='place'] { box-shadow: none; pointer-events: none; }
