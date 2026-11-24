@@ -14,6 +14,13 @@ import { BestFirst, Progress } from './best-first.js';
 import { suitOf, rankOf } from '../cards.js';
 
 const top = a => a[a.length - 1];
+// Each column as a few characters: how many cards are face down, then the cards, the same for either deck's copy.
+const columns = s => s.tab.map((t, a) => String.fromCharCode(s.down[a] + 33, ...t.map(c => (c % 52) + 40)));
+// The last table keyed, and the order its columns go in the key, for pack() straight after.
+let keyed = null, order = null;
+const sorted = [];
+// For each position a search began from, the cards it had and the stock as each row goes (see unpack).
+const begun = new WeakMap();
 const follows = (c, under) => suitOf(c) === suitOf(under) && rankOf(under) === rankOf(c) + 1;
 // Whether a row can be dealt: there is one, and every column has a card or, with fewer cards on the table than
 // columns, each of them has a column to itself.
@@ -72,8 +79,43 @@ const rules = {
 
   key(s) {
     // Columns in any order play the same; the stock only matters by how much is left.
-    const cols = s.tab.map((t, a) => String.fromCharCode(s.down[a] + 33, ...t.map(c => (c % 52) + 40))).sort();
-    return s.stock.length + '|' + cols.join('|');
+    const cols = columns(s), o = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    for (let j = 1; j < 10; j++) {
+      const x = o[j], c = cols[x];
+      let i = j - 1;
+      for (; i >= 0 && cols[o[i]] > c; i--) o[i + 1] = o[i];
+      o[i + 1] = x;
+    }
+    for (let j = 0; j < 10; j++) sorted[j] = cols[o[j]];
+    keyed = s; order = o;
+    return s.stock.length + '|' + sorted.join('|');
+  },
+
+  // The key holds every column; with it a search need keep only which column each one in it is on the table, as ten
+  // digits, of a position it hasn't looked at yet. The cards come back as the first of the two decks' (one ace of spades
+  // is as good as the other), and the stock from the position the search began with, which only ever loses its last ten.
+  pack(s) {
+    if (s !== keyed) rules.key(s);
+    const o = order;
+    return String.fromCharCode(o[0] + 48, o[1] + 48, o[2] + 48, o[3] + 48, o[4] + 48, o[5] + 48, o[6] + 48, o[7] + 48, o[8] + 48, o[9] + 48);
+  },
+
+  unpack(packed, key, start) {
+    let from = begun.get(start);
+    if (!from) begun.set(start, from = { cards: start.tab.reduce((n, t) => n + t.length, 0) + start.stock.length, stocks: new Map() });
+    const tab = [null, null, null, null, null, null, null, null, null, null], down = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let p = key.indexOf('|'), cards = 0;
+    const left = +key.slice(0, p);
+    for (let j = 0; j < 10; j++) {
+      const a = packed.charCodeAt(j) - 48, t = [];
+      down[a] = key.charCodeAt(++p) - 33;
+      for (let c; ++p < key.length && (c = key.charCodeAt(p)) !== 124;) t.push(c - 40); // up to the next '|'
+      tab[a] = t;
+      cards += t.length;
+    }
+    let stock = from.stocks.get(left);
+    if (!stock) from.stocks.set(left, stock = start.stock.slice(0, left)); // never changed, only replaced
+    return { tab, down, stock, sets: start.sets + (from.cards - cards - left) / 13 };
   },
 
   // Lower is closer to won: runs cleared, cards still face down, places where a column changes suit or breaks order,

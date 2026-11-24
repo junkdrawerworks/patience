@@ -8,7 +8,7 @@ import { spider } from '../js/games/spider.js';
 import { VARIANTS } from '../js/games/index.js';
 import { READY_DEALS } from '../js/games/ready-deals.js';
 import { hintFor, primeLine, Dealer, deadEnd, backTo } from '../js/deals.js';
-import { SpiderSearch, SpiderSure } from '../js/solvers/spider.js';
+import { SpiderSearch, SpiderSure, spiderRules } from '../js/solvers/spider.js';
 
 const S = 0, H = 1, C = 2, D = 3;
 const name = c => 'A23456789TJQK'[rankOf(c) - 1] + 'SHCD'[suitOf(c)];
@@ -319,6 +319,45 @@ for (const [v, n, count] of [['s1', 8, 7], ['s2', 4, 3]]) {
   });
 }
 
+test('a Spider search keeps each table it has still to look at as a few characters, and finds what it always found', () => {
+  // A whole table for each of the tens of thousands it keeps took a four-suit search to hundreds of megabytes. Now it
+  // keeps the key it already had for the table, which holds every column, and which column each one is on.
+  const search = spider.search(spider.deal(1, 's4'));
+  assert.equal(search.run(20000), 'unknown');
+  const kept = search.heap.items;
+  assert.ok(kept.length > 5000, `${kept.length} tables still to look at`);
+  assert.ok(kept.every(n => typeof n.state === 'string' && n.state.length === 10 && search.seen.has(n.key)), 'each kept small');
+
+  // A table rebuilt from what's kept plays just as the table did: the same key, moves, score and tables after each move.
+  const R = spiderRules, pos = spider.position(spider.deal(3, 's4'));
+  let s = R.start(pos).state, i = 0;
+  for (; i < 60; i++) {
+    const key = R.key(s), back = R.unpack(R.pack(s, key), key, R.start(pos).state);
+    assert.deepEqual(back.tab.map(t => t.map(c => c % 52)), s.tab.map(t => t.map(c => c % 52)));
+    assert.deepEqual([back.down, back.stock, back.sets, R.score(back)], [s.down, s.stock, s.sets, R.score(s)]);
+    const moves = R.moves(s);
+    assert.deepEqual(R.moves(back), moves);
+    for (const m of moves) assert.equal(R.key(R.apply(back, m).state), R.key(R.apply(s, m).state));
+    if (!moves.length) break;
+    s = R.apply(s, moves[(i * 7) % moves.length]).state;
+  }
+  assert.ok(i >= 20 && s.stock.length < 50, `${i} moves, a row dealt among them`);
+
+  // And the same way through as before: four suits, deal 7, in 4,619 tables and 175 moves.
+  const won = spider.search(spider.deal(7, 's4'));
+  assert.equal(won.run(120000), 'won');
+  assert.deepEqual([won.nodes, won.path.length, won.path[0]], [4619, 175, { a: 9, i: 4, b: 4 }]);
+  // Rebuilt at every table on that way, every row dealt and run cleared counts the same.
+  const start = R.start(spider.position(spider.deal(7, 's4'))).state;
+  let t = start;
+  for (const m of won.path) {
+    t = R.apply(t, m).state;
+    const key = R.key(t), back = R.unpack(R.pack(t, key), key, start);
+    assert.deepEqual([R.key(back), back.down, back.stock.length, back.sets], [key, t.down, t.stock.length, t.sets]);
+  }
+  assert.equal(t.sets, 8);
+});
+
 // A Spider position with nothing left to deal, built from ranks. One suit plays spades, two suits spades and hearts;
 // each card is the next copy of it not used yet (see cards.js). `cleared` is how many runs of each suit are gone.
 function spiderEnd(v, cleared, cols) {
@@ -410,7 +449,9 @@ test('Spider is out of moves when it takes a long look to be sure nothing helps'
   // moving cards about, and none of them turns a card over, clears a run or empties a column.
   const s = {"v":"s1","deal":68977,"tab":[{"down":[369,371,114,322,372],"up":[113,315,8,111,318]},{"down":[63,211,264,376],"up":[212,12,108,3,54,105]},{"down":[161,367,156,316,216],"up":[56,165,319,263,210]},{"down":[374,10,219,266],"up":[6,373,366,157,62,268,215,214,109,160,107,106,209,52]},{"down":[321,53,1,116],"up":[272]},{"down":[2,9,0,5],"up":[115,60,370]},{"down":[168,317,269],"up":[164]},{"down":[163,4,166,167],"up":[7,265,112,57,208,262,365]},{"down":[220,375,159,61],"up":[58,312,64,323,270]},{"down":[11,267,110],"up":[260,158,261,104]}],"stock":[],"sets":[[364,313,314,55,368,213,162,59,320,217,218,271,324]],"moves":106};
   assert.equal(new Set([...s.tab.flatMap(t => [...t.down, ...t.up]), ...s.sets.flat()]).size, 104, 'every card once');
-  assert.equal(spider.deadEnd(s).run(400), 'unknown', 'a short look can’t tell');
+  const look = spider.deadEnd(s);
+  assert.equal(look.run(400), 'unknown', 'a short look can’t tell');
+  assert.ok(look.todo.length > 1 && look.todo.every(t => typeof t === 'string'), 'the tables it has still to look from are kept small');
   assert.equal(spider.outOfMoves(s), true);
   assert.equal(spider.deadEnd(s).none, false);
 });

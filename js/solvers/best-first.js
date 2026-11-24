@@ -10,6 +10,12 @@
 //   score(state)     -> number             how far from won it looks; lower is better
 //   done(state)      -> boolean            won, or as good as
 //
+// And, to keep the memory a long search takes down, it can supply:
+//   pack(state, key)           -> packed   a small stand-in for the state, kept with its key instead of it
+//   unpack(packed, key, start) -> state    the state again, for when the search comes to look at it; start is the
+//                                          state the search began from
+// A search keeps every position it hasn't looked at yet, tens of thousands of them, and a whole table each is a lot.
+//
 // Like the Klondike solver, it can be run a slice at a time with step().
 
 export class BestFirst {
@@ -22,7 +28,8 @@ export class BestFirst {
     this.result = null; // 'won', 'lost' (looked everywhere) or null while still looking
     this.path = null;   // the moves that win, when there are some
     const { state, autos } = game.start(position);
-    this.root = { state, parent: null, move: null, autos, g: 0 };
+    this.start = state;
+    this.root = { state, key: null, parent: null, move: null, autos, g: 0, first: undefined };
     this.best = null;   // the most promising position seen, for a hint when time runs out
     this.firsts = new Map(); // each first move -> the best score seen down that way, for other hints than the best
     if (game.done(state)) { this.finish(this.root); return; }
@@ -36,13 +43,15 @@ export class BestFirst {
     while (this.heap.size) {
       if (this.nodes >= stop) return null;
       const node = this.heap.pop();
-      for (const m of g.moves(node.state)) {
-        const { state, autos } = g.apply(node.state, m);
+      const here = g.unpack && node.key ? g.unpack(node.state, node.key, this.start) : node.state;
+      node.state = null; // looked at now, so only the way here is needed
+      for (const m of g.moves(here)) {
+        const { state, autos } = g.apply(here, m);
         const k = g.key(state);
         if (this.seen.has(k)) continue;
         this.seen.add(k);
         this.nodes++;
-        const child = { state, parent: node, move: m, autos, g: node.g + 1, first: node.first ?? m };
+        const child = { state: g.pack ? g.pack(state, k) : state, key: g.pack ? k : null, parent: node, move: m, autos: autos.length ? autos : NONE, g: node.g + 1, first: node.first ?? m };
         if (g.done(state)) { this.finish(child); return this.result; }
         const score = g.score(state);
         if (!this.best || score < this.best.score) this.best = { node: child, score };
@@ -97,7 +106,8 @@ export class Progress {
     const { state, autos } = game.start(position);
     this.root = state;
     this.seen = new Set([game.key(state)]);
-    this.todo = [state];
+    this.todo = [state];   // the positions still to look from, each packed small when the game can (see BestFirst)
+    this.keys = [null];    // and the key of each one packed, to unpack it with
     this.none = !autos.length && !moves(state).length;
     if (autos.length) this.result = 'live';
   }
@@ -107,7 +117,8 @@ export class Progress {
     const g = this.game, stop = this.nodes + budget;
     while (this.todo.length) {
       if (this.nodes >= stop) return null;
-      const s = this.todo.pop();
+      const t = this.todo.pop(), key = this.keys.pop();
+      const s = key ? g.unpack(t, key, this.root) : t;
       for (const m of this.moves(s)) {
         const { state, autos } = g.apply(s, m);
         if (autos.length || this.helps(state, m)) { this.result = 'live'; return this.result; }
@@ -115,7 +126,8 @@ export class Progress {
         if (this.seen.has(k)) continue;
         this.seen.add(k);
         this.nodes++;
-        this.todo.push(state);
+        this.todo.push(g.pack ? g.pack(state, k) : state);
+        this.keys.push(g.pack ? k : null);
       }
     }
     this.result = 'dead';
@@ -130,6 +142,8 @@ export class Progress {
     return this.result;
   }
 }
+
+const NONE = Object.freeze([]);
 
 function pathTo(node) {
   const chain = [];
