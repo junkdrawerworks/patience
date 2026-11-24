@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { card, suitOf, rankOf } from '../js/cards.js';
 import { freecell, room } from '../js/games/freecell.js';
 import { spider } from '../js/games/spider.js';
+import { pyramid, forSolver as pyramidPosition } from '../js/games/pyramid.js';
+import { Search as PyramidSearch } from '../js/solvers/pyramid.js';
 import { VARIANTS } from '../js/games/index.js';
 import { READY_DEALS } from '../js/games/ready-deals.js';
 import { hintFor, primeLine, Dealer, deadEnd, backTo } from '../js/deals.js';
@@ -719,3 +721,109 @@ test('Hint keeps to the way it found only with the setting it found it with', as
   assert.equal(await followHint('k3', 7016, { auto: false, switchOnAt: 22 }), 2);
 });
 
+
+// ---- Pyramid ----
+
+// A Pyramid table: the pyramid's places row by row (null for gone), the deck from its top card, and the rest.
+const pyr = (places, { deck = [], drawn = [], waste = [], pass = 1 } = {}) => ({
+  v: 'py', deal: 0, pyr: places, stock: deck.slice().reverse(), drawn, waste, out: [], pass, moves: 0,
+});
+// The pyramid with only its bottom row's last two places and the one above them left (place 20 rests on 26 and 27).
+const lastThree = (a, b, c) => pyr(Array.from({ length: 28 }, (_, p) => (p === 20 ? a : p === 26 ? b : p === 27 ? c : null)));
+
+test('Pyramid deals 28 cards in seven rows and leaves 24 in the deck, the same for the same number', () => {
+  const s = pyramid.deal(42);
+  assert.equal(s.pyr.length, 28);
+  assert.equal(s.stock.length, 24);
+  assert.equal(new Set([...s.pyr, ...s.stock]).size, 52);
+  assert.deepEqual(pyramid.deal(42), s);
+  assert.notDeepEqual(pyramid.deal(43).pyr, s.pyr);
+  assert.deepEqual(pyramid.layout(s, false).places.slice(0, 3).map(p => [p.col, p.row]), [[3, 0], [2.5, 1], [3.5, 1]], 'each row half a card further out');
+  assert.deepEqual(pyramid.layout(s, false).places[0].under, ['p1', 'p2']);
+});
+
+test('Pyramid takes away pairs adding up to 13 and kings on their own, and only cards with nothing on them', () => {
+  const s = lastThree(card(H, 12), card(S, 1), card(C, 13)); // queen of hearts resting on the ace of spades and king of clubs
+  assert.equal(pyramid.lift(s, 'p20', 0), null, 'the queen is covered');
+  assert.equal(pyramid.move(s, 'p26', 1, 'p20'), null, 'so the ace can’t pair with it');
+  assert.equal(pyramid.tapTarget(s, 'p27', 1), 'out', 'a tap takes a king away');
+  assert.equal(pyramid.tapTarget(s, 'p26', 1), null, 'an ace waits for its pair');
+  assert.equal(pyramid.move(s, 'p26', 1, 'out'), null, 'only a king goes on its own');
+  const t = pyramid.move(s, 'p27', 1, 'out');
+  assert.deepEqual([t.pyr[27], t.out], [null, [card(C, 13)]]);
+  assert.equal(pyramid.lift(t, 'p20', 0), null);
+  const u = { ...t, pyr: t.pyr.map((c, p) => (p === 26 ? card(D, 2) : c)) };
+  assert.equal(pyramid.canDrop(u, [card(D, 2)], 'p20'), false, 'a queen and a 2 make 14');
+  assert.match(pyramid.dropNote(u, [card(D, 2)], 'p20'), /add up to 13/);
+  const w = pyramid.move(t, 'p26', 1, 'p20');
+  assert.equal(w, null, 'the queen is still under the ace');
+  // The ace from the waste onto the queen, with nothing on her any more.
+  const v = { ...t, pyr: t.pyr.map((c, p) => (p === 26 ? null : c)), waste: [card(S, 1)] };
+  const x = pyramid.move(v, 'waste', 1, 'p20');
+  assert.ok(pyramid.won(x), 'the pyramid is clear');
+  assert.deepEqual(x.waste, []);
+  assert.deepEqual(new Set(x.out), new Set([card(C, 13), card(H, 12), card(S, 1)]));
+});
+
+test('Pyramid turns up a card at a tap, the last one going to the waste, and goes through the deck three times', () => {
+  const s = lastThree(card(H, 5), card(S, 9), card(C, 9));
+  s.stock = [card(D, 8), card(D, 4)]; // the 4 of diamonds on top
+  const a = pyramid.stock(s);
+  assert.deepEqual([a.drawn, a.waste, pyramid.turned(a)], [[card(D, 4)], [], card(D, 4)]);
+  const b = pyramid.stock(a);
+  assert.deepEqual([b.drawn, b.waste], [[card(D, 8)], [card(D, 4)]], 'the 4 goes to the waste, where it can still pair');
+  assert.equal(pyramid.canDrop(b, [card(D, 8)], 'waste'), false, '8 and 4 make 12');
+  assert.ok(pyramid.canDrop(b, [card(S, 9)], 'waste'), 'a 9 from the pyramid pairs with the 4 on the waste');
+  let t = b;
+  for (const pass of [2, 3]) {
+    t = pyramid.stock(t);
+    assert.deepEqual([t.pass, t.stock, t.drawn, t.waste, pyramid.passes(t)], [pass, [card(D, 8), card(D, 4)], [], [], 3 - pass], `turned over for time ${pass}`);
+    t = pyramid.stock(pyramid.stock(t));
+  }
+  assert.equal(pyramid.stock(t), null, 'not a fourth time');
+  assert.match(pyramid.stockNote(t).text, /third time through the deck, the last/);
+  assert.equal(pyramid.stockNote(b), null);
+});
+
+test('the Pyramid solver’s wins are real wins on the table, and it knows a deal whose 10 has every 3 resting on it can’t be won', () => {
+  for (const n of [1, 5, 6, 12, 27, 35]) {
+    let s = pyramid.deal(n);
+    const search = pyramid.search(s);
+    assert.equal(search.run(pyramid.budget.deal), 'won', `deal ${n}`);
+    for (let i = 0, guard = 0; i < search.path.length; guard++) {
+      assert.ok(guard < 500, `deal ${n}: the deck never turned up the card the line wanted`);
+      const m = pyramid.fromSolver(s, search.path[i]);
+      s = m.stock ? pyramid.stock(s) : pyramid.move(s, m.from, m.n, m.to);
+      assert.ok(s, `deal ${n}: move ${i} isn't allowed`);
+      if (!m.stock) i++;
+    }
+    assert.ok(pyramid.won(s), `deal ${n} not won`);
+  }
+  // Deal 19: the 10 of clubs at the top, and every 3 below it in the pyramid, so none can ever pair with it.
+  const s = pyramid.deal(19);
+  assert.equal(rankOf(s.pyr[0]), 10);
+  assert.deepEqual(s.pyr.filter(c => rankOf(c) === 3).length, 4);
+  assert.equal(pyramid.search(s).run(1000), 'lost');
+  // Without that shortcut, the search agrees, looking everywhere, on a deal small enough to look everywhere.
+  const full = new PyramidSearch(pyramidPosition(pyramid.deal(58)));
+  full.prune = false;
+  assert.equal(full.run(400000), 'lost');
+  assert.equal(pyramid.search(pyramid.deal(58)).run(400000), 'lost');
+});
+
+test('Pyramid is out of moves once no line of moves takes a card from the pyramid', () => {
+  // A queen covered by two 5s, and the deck's last card a 7 on its last time through: the 7 can't pair with a 5.
+  const s = lastThree(card(H, 12), card(S, 5), card(C, 5));
+  s.drawn = [card(D, 7)];
+  s.pass = 3;
+  assert.equal(pyramid.outOfMoves(s), true);
+  assert.equal(pyramid.deadEnd(s).none, true, 'there’s no move at all');
+  assert.equal(pyramid.search(s).run(1000), 'lost');
+  // With an 8 to come in the deck, it can pair with a 5.
+  const t = { ...s, stock: [card(D, 8)] };
+  assert.equal(pyramid.outOfMoves(t), false);
+  // With the deck to turn over again, the 7 comes round, but still pairs with nothing that helps.
+  const u = { ...s, pass: 2 };
+  assert.equal(pyramid.outOfMoves(u), true);
+  assert.equal(pyramid.deadEnd(u).none, false, 'the deck can still be turned over, just to no end');
+});
