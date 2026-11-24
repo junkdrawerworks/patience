@@ -836,8 +836,9 @@ function bringBack(copy) {
 // ---- settings ----
 
 const toggles = { winnable: 'o-winnable', auto: 'o-auto', clock: 'o-clock', four: 'o-four', left: 'o-left', buzz: 'o-buzz' };
-// A browser that can't buzz (Safari, on an iPhone) doesn't show the setting at all.
-$('buzz-setting').hidden = typeof navigator.vibrate !== 'function';
+// A browser that can't buzz (Safari, on an iPhone) doesn't show the setting at all, and nor does a computer, where
+// Chrome has the way to buzz but nothing to buzz with.
+$('buzz-setting').hidden = typeof navigator.vibrate !== 'function' || !matchMedia('(pointer: coarse)').matches;
 for (const [k, id] of Object.entries(toggles)) {
   $(id).addEventListener('change', e => {
     settings[k] = e.target.checked;

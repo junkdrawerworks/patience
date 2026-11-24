@@ -2818,6 +2818,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pn.goto(base);
   await pn.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
   assert.equal(await pn.evaluate(() => typeof navigator.vibrate), 'undefined');
+  assert.equal(await pn.evaluate(() => matchMedia('(pointer: coarse)').matches), true, 'a touch screen, so only the missing buzz hides it');
   await pn.click('#b-menu');
   assert.equal(await pn.isHidden('#buzz-setting'), true, 'not offered where the browser can\'t buzz');
   await pn.click('#sheet-menu .close');
@@ -2829,6 +2830,19 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pn.waitForTimeout(300);
   assert.deepEqual(quiet, [], 'errors with nothing to buzz');
   await cn.close();
+
+  // Nor on a computer, where Chrome has the way to buzz but nothing to buzz with.
+  const cd = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  await cd.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'vibrate', { configurable: true, value: () => true });
+    try { localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider', 'pyramid'] })); } catch { /* blocked */ }
+  });
+  const pd = await cd.newPage();
+  await pd.goto(base);
+  await pd.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  await pd.click('#b-menu');
+  assert.equal(await pd.isHidden('#buzz-setting'), true, 'not offered on a computer');
+  await cd.close();
 }
 
 // A card let go where it was picked up, nudged a little, stays in its column, though it would fit on the next; one let
