@@ -2,7 +2,7 @@
 // themselves (or not), and again, until the game is won. Counts the games won, and any that end with "no way to win",
 // a move the table refuses, Hint leading back to a table it has already been at (round in circles for good), or the
 // game saying no move can help at a table on the way to a win.
-//   node dev/hint-check.mjs [k1|k3|fc|s1|s2|s4] [deals] [on|off] [first deal|list|daily]
+//   node dev/hint-check.mjs [k1|k3|fc|s1|s2|s4|py] [deals] [on|off] [first deal|list|daily]
 // Deals are the ones the game would hand out from the first deal number on: those its solver wins within its limit.
 // With `list`, the deals checked in advance for that way instead (js/games/ready-deals.js), the first of them; with
 // `daily`, Today's deals (js/games/daily-deals.js), from the first day.

@@ -31,7 +31,7 @@ const browser = await pw.chromium.launch();
     const c = await newContext(options);
     if (!firstWords) {
       await c.addInitScript(() => {
-        try { localStorage.getItem('patience.v1') ?? localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider'] })); } catch { /* blocked */ }
+        try { localStorage.getItem('patience.v1') ?? localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider', 'pyramid'] })); } catch { /* blocked */ }
       });
     }
     return c;
@@ -2051,7 +2051,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.equal(await pn.evaluate(() => document.activeElement.id), 'deal-n');
   assert.equal(await pn.isHidden('#deal-n-says'), true);
   await pn.fill('#deal-n', '52,817');
-  assert.deepEqual(await lines(), { k1: 'Deal 52,817', k3: 'Deal 52,817', fc: 'off: Up to 32,000', s1: 'Deal 52,817', s2: 'Deal 52,817', s4: 'Deal 52,817' });
+  assert.deepEqual(await lines(), { k1: 'Deal 52,817', k3: 'Deal 52,817', fc: 'off: Up to 32,000', s1: 'Deal 52,817', s2: 'Deal 52,817', s4: 'Deal 52,817', py: 'Deal 52,817' });
   assert.match(await pn.textContent('#deal-n-says'), /isn’t checked first.*11,982/);
   await pn.fill('#deal-n', '1000000');
   assert.ok(Object.values(await lines()).every(l => l.startsWith('off: Up to')), 'no game has a deal so high');
@@ -2081,11 +2081,11 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pn.click('#b-number');
   await pn.fill('#deal-n', '5');
   await pn.fill('#deal-n', '');
-  assert.deepEqual(await lines(), { k1: 'Carry on', k3: '', fc: '', s1: '', s2: 'Carry on', s4: '' });
+  assert.deepEqual(await lines(), { k1: 'Carry on', k3: '', fc: '', s1: '', s2: 'Carry on', s4: '', py: '' });
   await pn.fill('#deal-n', '5');
   await pn.click('#b-number');
   assert.equal(await pn.isHidden('#by-number'), true, 'By number puts it away');
-  assert.deepEqual(await lines(), { k1: 'Carry on', k3: '', fc: '', s1: '', s2: 'Carry on', s4: '' }, 'with the number it had');
+  assert.deepEqual(await lines(), { k1: 'Carry on', k3: '', fc: '', s1: '', s2: 'Carry on', s4: '', py: '' }, 'with the number it had');
   await cn.close();
 }
 
@@ -2122,7 +2122,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pt.click('#b-today');
   assert.equal(await pt.getAttribute('#b-today', 'aria-pressed'), 'true');
   assert.match(await pt.textContent('#today-says'), /same deal on every phone today/);
-  assert.deepEqual(await lines(), { k1: 'Today’s deal', k3: 'Today’s deal', fc: 'Today’s deal', s1: 'Today’s deal', s2: 'Today’s deal', s4: 'Today’s deal' });
+  assert.deepEqual(await lines(), { k1: 'Today’s deal', k3: 'Today’s deal', fc: 'Today’s deal', s1: 'Today’s deal', s2: 'Today’s deal', s4: 'Today’s deal', py: 'Today’s deal' });
   await pt.click('[data-v="fc"]');
   await pt.waitForTimeout(1500);
   await ready();
@@ -2142,7 +2142,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.deepEqual(await now(), ['k1', todays('k1'), day, 'Klondike, draw one · Today’s deal'], 'and keep their name after a reload');
   await pt.click('#b-new');
   await pt.click('#b-today');
-  assert.deepEqual(await lines(), { k1: 'Playing', k3: 'Today’s deal', fc: 'Carry on', s1: 'Today’s deal', s2: 'Today’s deal', s4: 'Today’s deal' });
+  assert.deepEqual(await lines(), { k1: 'Playing', k3: 'Today’s deal', fc: 'Carry on', s1: 'Today’s deal', s2: 'Today’s deal', s4: 'Today’s deal', py: 'Today’s deal' });
   await pt.click('[data-v="k1"]');
   assert.equal(await pt.isHidden('#sheet-new'), true, 'Playing leaves it be');
   assert.deepEqual(await now(), ['k1', todays('k1'), day, 'Klondike, draw one · Today’s deal']);
@@ -2518,7 +2518,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.equal(await pf.isHidden('#toast'), false, 'it stays until something else happens');
   await pf.click('#toast button');
   assert.equal(await pf.isHidden('#sheet-menu'), false, 'How to play opens the menu');
-  assert.deepEqual(await pf.evaluate(() => [...document.querySelectorAll('.howto details')].map(d => d.open)), [true, false, false], 'at Klondike’s rules');
+  assert.deepEqual(await pf.evaluate(() => [...document.querySelectorAll('.howto details')].map(d => d.open)), [true, false, false, false], 'at Klondike’s rules');
   const shown = await pf.evaluate(() => { const r = document.querySelector('.howto details[open] summary').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; });
   assert.ok(shown, 'scrolled to them');
   await pf.keyboard.press('Escape');
@@ -2546,13 +2546,21 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pf.waitForTimeout(2500);
   await ready();
   assert.equal(await pf.isHidden('#toast'), true, 'Spider, played before, says nothing');
+  // The first Pyramid deal says Pyramid's.
+  await pf.evaluate(() => window.patience.newGame('py'));
+  await pf.waitForSelector('#toast:not([hidden])', { timeout: 15000 });
+  assert.equal(await words(), 'Tap two cards that add up to 13, a queen and an ace, say. Kings go alone.');
+  await pf.keyboard.press('Escape');
+  await pf.evaluate(() => window.patience.newGame('s1'));
+  await pf.waitForTimeout(2500);
+  await ready();
 
   // The New game sheet's How to play opens the menu at the rules of the game being played.
   await pf.click('#b-new');
   await pf.click('#b-howto');
   assert.equal(await pf.isHidden('#sheet-new'), true);
   assert.equal(await pf.isHidden('#sheet-menu'), false);
-  assert.deepEqual(await pf.evaluate(() => [...document.querySelectorAll('.howto details')].map(d => d.open)), [false, false, true], 'at Spider’s rules');
+  assert.deepEqual(await pf.evaluate(() => [...document.querySelectorAll('.howto details')].map(d => d.open)), [false, false, true, false], 'at Spider’s rules');
   await pf.keyboard.press('Escape');
   assert.deepEqual(errors, [], 'errors on a first word');
   await cf.close();
@@ -3074,8 +3082,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
 
 // The New game sheet tells a newcomer how each game is won and built: FreeCell's foundations and alternating colours,
 // and Spider's any suit, with only a run of one suit moving. Part way through a game, it still doesn't scroll held
-// sideways, and on a 360 by 740 phone it's no taller than it was (715 px), the two lines under Four suits and Today's
-// deal's row (805). Those lines point four-suit players to Four-colour suits.
+// sideways, with the four games side by side, and on a 360 by 740 phone it's no taller than it was (715 px), the two
+// lines under Four suits, Today's deal's row and Pyramid (960). Those lines point four-suit players to Four-colour suits.
 {
   const cn = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   const pn = await cn.newPage();
@@ -3094,7 +3102,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     await pn.waitForTimeout(400);
     const fit = await pn.$eval('#sheet-new .panel', p => [p.scrollHeight, p.clientHeight]);
     if (width > height) assert.ok(fit[0] <= fit[1], `the New game sheet scrolls at ${width} by ${height}: ${fit}`);
-    else assert.ok(fit[0] <= 805, `the New game sheet at ${width} by ${height} is ${fit[0]} px tall, more than it was`);
+    else assert.ok(fit[0] <= 960, `the New game sheet at ${width} by ${height} is ${fit[0]} px tall, more than it was`);
     await pn.keyboard.press('Escape');
   }
   await cn.close();
@@ -3127,6 +3135,128 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await choose('Light');
   assert.deepEqual(await look(), ['#2a6b4e', '#1f5a42'], 'Light on a phone set to dark');
   await cl.close();
+}
+
+// Pyramid on the table. A tap on a king takes it away, a covered card only shakes, a tap picks a card and a tap on the
+// card it pairs with takes both (a tap on it again lets it go), and a card dragged onto its pair takes both too. The deck
+// turns a card up at a tap, sending the last to the waste, where it can still pair, and the empty deck says how many
+// more times it can be turned over. The arrow keys go round the pyramid and Enter picks and pairs; Hint lights up a
+// pair and Enter plays it. Clearing the pyramid wins, into Pyramid's own record. A game part way survives a reload.
+{
+  const cp = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pp = await cp.newPage();
+  const errors = [];
+  pp.on('pageerror', e => errors.push(e.message));
+  const ready = () => pp.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = () => pp.evaluate(() => window.patience.state);
+  const said = () => pp.waitForFunction(() => document.getElementById('said').textContent, null, { timeout: 3000 }).then(h => h.jsonValue());
+  // (Two frames, so a tap waiting behind a busy page has been taken before the table is looked at.)
+  const frames = () => pp.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const chosen = () => pp.evaluate(() => [...document.querySelectorAll('.card.chosen')].map(e => +e.dataset.c));
+  const tapCard = async c => { const b = await pp.$eval(`#card-${c}`, e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height * 0.2]; }); await pp.touchscreen.tap(b[0], b[1]); await frames(); await pp.waitForTimeout(300); await ready(); };
+  await pp.goto(base);
+  await ready();
+  await pp.evaluate(() => window.patience.newGame('py'));
+  await pp.waitForTimeout(1800);
+  await ready();
+  const dealt = await now();
+  assert.equal(dealt.v, 'py');
+  const { READY_DEALS } = await import(pathToFileURL(join(root, 'js/games/ready-deals.js')).href);
+  assert.ok(READY_DEALS.py.includes(dealt.deal), 'the first deal comes from the list checked in advance');
+  assert.equal(await pp.textContent('#status'), `Pyramid · Deal ${dealt.deal.toLocaleString('en-US')}`);
+  assert.equal(await pp.locator('.card:not(.down)').count(), 28, 'the pyramid face up, the deck face down');
+  // The queen of hearts on the 6 of spades and king of clubs, beside the jack of diamonds, 2 of clubs, 7 of diamonds and
+  // ace of diamonds in the bottom row; the 5 of spades on top of the deck, then the 8 of diamonds and the 3 of hearts.
+  const Q = 24, J = 49, TWO = 27, SEVEN = 45, ACE = 39, SIX = 5, K = 38, FIVE = 4, EIGHT = 46;
+  await pp.evaluate(cards => {
+    const pyr = Array(28).fill(null);
+    Object.entries(cards).forEach(([p, c]) => { pyr[p] = c; });
+    // The other 43 cards are taken away already.
+    const out = Array.from({ length: 52 }, (_, c) => c).filter(c => !pyr.includes(c) && ![14, 46, 4].includes(c));
+    window.patience.load({ v: 'py', deal: 1, pyr, stock: [14, 46, 4], drawn: [], waste: [], out, pass: 1, moves: 0 });
+  }, { 20: Q, 21: J, 22: TWO, 23: SEVEN, 24: ACE, 26: SIX, 27: K });
+  await ready();
+  await tapCard(Q);
+  assert.deepEqual([(await now()).moves, await chosen()], [0, []], 'the covered queen only shakes');
+  await tapCard(K);
+  let s = await now();
+  assert.deepEqual([s.moves, s.pyr[27], s.out.at(-1)], [1, null, K], 'a tap took the king away');
+  assert.equal(await said(), 'King of clubs taken away.');
+  await tapCard(J);
+  assert.deepEqual(await chosen(), [J], 'a tap picked the jack');
+  await tapCard(J);
+  assert.deepEqual([await chosen(), (await now()).moves], [[], 1], 'and again let it go');
+  await tapCard(J);
+  await tapCard(TWO);
+  s = await now();
+  assert.deepEqual([s.moves, s.pyr[21], s.pyr[22], await chosen()], [2, null, null, []], 'the jack and the 2 went together');
+  await pp.touchscreen.tap(...await pp.$eval('#pile-stock', e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+  await frames();
+  await pp.waitForFunction(() => window.patience.state.drawn.length === 1);
+  await pp.evaluate(() => document.getElementById('pile-stock').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, isPrimary: true })));
+  await frames();
+  await pp.waitForTimeout(400);
+  await ready();
+  s = await now();
+  assert.deepEqual([s.drawn, s.waste, s.stock], [[EIGHT], [FIVE], [14]], 'two taps turned up the 5, then the 8 onto it');
+  const from = (await pp.$eval(`#card-${EIGHT}`, e => e.getBoundingClientRect().toJSON())), to = await pp.$eval(`#card-${FIVE}`, e => e.getBoundingClientRect().toJSON());
+  await pp.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await pp.mouse.down();
+  await pp.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
+  await pp.mouse.up();
+  await frames();
+  await pp.waitForTimeout(400);
+  await ready();
+  s = await now();
+  assert.deepEqual([s.drawn, s.waste, s.moves], [[], [], 5], 'the 8 dragged onto the 5 took both');
+  await pp.keyboard.press('d');
+  await pp.waitForFunction(() => window.patience.state.drawn.length === 1);
+  assert.equal(await pp.getAttribute('#pile-stock', 'data-passes'), '2', 'the empty deck says it can be turned over twice more');
+  assert.equal(await pp.getAttribute('#pile-stock', 'aria-label'), 'Deck empty, tap to turn the pile over, twice more');
+  // By keyboard: the first arrow shows the ring on the queen; down to the 6 under her, Enter picks it, left to the 7 past
+  // the ace, and Enter takes the pair.
+  await pp.keyboard.press('ArrowUp');
+  assert.equal((await pp.evaluate(() => window.patience.cursor)).pile, 'p20');
+  await pp.keyboard.press('ArrowDown');
+  assert.equal((await pp.evaluate(() => window.patience.cursor)).pile, 'p26');
+  await pp.keyboard.press('Enter');
+  assert.deepEqual(await chosen(), [SIX]);
+  await pp.keyboard.press('ArrowLeft');
+  await pp.keyboard.press('ArrowLeft');
+  assert.equal((await pp.evaluate(() => window.patience.cursor)).pile, 'p23');
+  await pp.keyboard.press('Enter');
+  await frames();
+  await pp.waitForTimeout(400);
+  await ready();
+  s = await now();
+  assert.deepEqual([s.pyr[23], s.pyr[26], s.moves], [null, null, 7], 'Enter took the 6 and 7');
+  await pp.keyboard.press('Escape');
+  await pp.keyboard.press('h');
+  await pp.waitForFunction(() => document.querySelectorAll('.card.hint').length === 2, null, { timeout: 10000 });
+  assert.deepEqual(await pp.evaluate(() => [...document.querySelectorAll('.card.hint')].map(e => +e.dataset.c).sort((a, b) => a - b)), [Q, ACE].sort((a, b) => a - b), 'Hint lit the ace and the queen');
+  await pp.keyboard.press('Enter');
+  await pp.waitForSelector('#won:not([hidden])', { timeout: 10000 });
+  await pp.waitForSelector('#won .panel:not([hidden])', { timeout: 10000 });
+  assert.match(await pp.textContent('#won-line'), /^Pyramid, deal 1, in .* and 8 moves\.$/);
+  const st = await pp.evaluate(() => window.patience.stats.py);
+  assert.deepEqual([st.played, st.won, st.fewest], [1, 1, 8], 'into Pyramid’s own record');
+  // A game part way through comes back after a reload, with its Undo.
+  await pp.click('#b-again');
+  await pp.waitForTimeout(1800);
+  await ready();
+  const n = (await now()).deal;
+  await pp.evaluate(playInto, { v: 'py', n, steps: 6, ms: 5000 });
+  await ready();
+  const before = await now();
+  await pp.reload();
+  await ready();
+  assert.deepEqual(await now(), before, 'the same table after a reload');
+  assert.equal(await pp.isDisabled('#b-undo'), false, 'with Undo');
+  await pp.click('#b-menu');
+  assert.equal(await pp.inputValue('#stats-for'), 'py');
+  assert.equal(await pp.evaluate(() => document.querySelector('.howto details[open]')?.dataset.game), 'pyramid', 'How to play opens at Pyramid');
+  assert.deepEqual(errors, []);
+  await cp.close();
 }
 
 // Klondike's deck shows its turn-over arrow only while there's something to turn over.

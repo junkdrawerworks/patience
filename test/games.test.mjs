@@ -7,6 +7,7 @@ import { freecell, room } from '../js/games/freecell.js';
 import { spider } from '../js/games/spider.js';
 import { pyramid, forSolver as pyramidPosition } from '../js/games/pyramid.js';
 import { Search as PyramidSearch } from '../js/solvers/pyramid.js';
+import { moveWords, hintWords } from '../js/words.js';
 import { VARIANTS } from '../js/games/index.js';
 import { READY_DEALS } from '../js/games/ready-deals.js';
 import { hintFor, primeLine, Dealer, deadEnd, backTo } from '../js/deals.js';
@@ -507,7 +508,7 @@ test('Hint on a won Spider table has nothing to suggest, rather than failing', a
 test('the deals checked in advance really are won by the solver', () => {
   // Every Klondike and FreeCell deal listed, and a spread of the Spider ones, which take longer to check (all 60 or so
   // seconds of them: node dev/ready-deals.mjs --check).
-  const every = { k1: 1, k3: 1, fc: 1, s1: 5, s2: 5, s4: 36 };
+  const every = { k1: 1, k3: 1, fc: 1, s1: 5, s2: 5, s4: 36, py: 1 };
   for (const [v, list] of Object.entries(READY_DEALS)) {
     const game = VARIANTS[v].game;
     for (const n of list.filter((_, i) => i % every[v] === 0)) assert.equal(game.search(game.deal(n, v)).run(game.budget.deal), 'won', `${v} deal ${n}`);
@@ -576,6 +577,7 @@ test('following Hint from a dealt deal wins, and Hint never goes round in circle
   await followHint('k3', 70001, { auto: false });
   await followHint('fc', 617);
   await followHint('s1', 3);
+  await followHint('py', 5);
 });
 
 test('while you do what Hint says, it keeps to the way it found instead of searching again', async () => {
@@ -745,6 +747,8 @@ test('Pyramid deals 28 cards in seven rows and leaves 24 in the deck, the same f
 test('Pyramid takes away pairs adding up to 13 and kings on their own, and only cards with nothing on them', () => {
   const s = lastThree(card(H, 12), card(S, 1), card(C, 13)); // queen of hearts resting on the ace of spades and king of clubs
   assert.equal(pyramid.lift(s, 'p20', 0), null, 'the queen is covered');
+  assert.equal(pyramid.liftNote(s, 'p20', 0), 'A card can go once both cards on it have gone.');
+  assert.equal(pyramid.liftNote(s, 'p26', 0), null);
   assert.equal(pyramid.move(s, 'p26', 1, 'p20'), null, 'so the ace can’t pair with it');
   assert.equal(pyramid.tapTarget(s, 'p27', 1), 'out', 'a tap takes a king away');
   assert.equal(pyramid.tapTarget(s, 'p26', 1), null, 'an ace waits for its pair');
@@ -763,6 +767,8 @@ test('Pyramid takes away pairs adding up to 13 and kings on their own, and only 
   assert.ok(pyramid.won(x), 'the pyramid is clear');
   assert.deepEqual(x.waste, []);
   assert.deepEqual(new Set(x.out), new Set([card(C, 13), card(H, 12), card(S, 1)]));
+  assert.equal(moveWords(pyramid, v, x, { from: 'waste', n: 1, to: 'p20' }), 'Ace of spades and queen of hearts taken away.');
+  assert.equal(hintWords(pyramid, v, { from: 'waste', n: 1, to: 'p20' }), 'Hint: the ace of spades with the queen of hearts.');
 });
 
 test('Pyramid turns up a card at a tap, the last one going to the waste, and goes through the deck three times', () => {
@@ -774,6 +780,7 @@ test('Pyramid turns up a card at a tap, the last one going to the waste, and goe
   assert.deepEqual([b.drawn, b.waste], [[card(D, 8)], [card(D, 4)]], 'the 4 goes to the waste, where it can still pair');
   assert.equal(pyramid.canDrop(b, [card(D, 8)], 'waste'), false, '8 and 4 make 12');
   assert.ok(pyramid.canDrop(b, [card(S, 9)], 'waste'), 'a 9 from the pyramid pairs with the 4 on the waste');
+  assert.equal(moveWords(pyramid, a, b, { stock: true }), 'Turned up the 8 of diamonds.');
   let t = b;
   for (const pass of [2, 3]) {
     t = pyramid.stock(t);
@@ -826,4 +833,16 @@ test('Pyramid is out of moves once no line of moves takes a card from the pyrami
   const u = { ...s, pass: 2 };
   assert.equal(pyramid.outOfMoves(u), true);
   assert.equal(pyramid.deadEnd(u).none, false, 'the deck can still be turned over, just to no end');
+});
+
+test('Hint in Pyramid says which card to draw for, and plays pairs and kings', async () => {
+  const s = lastThree(card(H, 12), card(S, 5), card(C, 13));
+  s.stock = [card(S, 1), card(D, 8), card(D, 4)]; // the 4 on top, then the 8, then the ace
+  // The king goes, then the 8 pairs with the 5, and the ace with the queen.
+  const h = await hintFor(s);
+  assert.deepEqual(h.move, { from: 'p27', n: 1, to: 'out' });
+  const t = pyramid.move(s, 'p27', 1, 'out');
+  const g = await hintFor(t);
+  assert.deepEqual(g.move, { stock: true, c: card(D, 8) }, 'draw, for the 8');
+  assert.equal(hintWords(pyramid, t, { stock: true }), 'Hint: turn up a card.');
 });

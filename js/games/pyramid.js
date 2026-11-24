@@ -139,6 +139,9 @@ export const pyramid = {
     return null;
   },
 
+  // A covered card in the pyramid, dragged anyway (a tap only shakes it).
+  liftNote: (s, id) => (place(id) >= 0 && s.pyr[place(id)] !== null && !open(s, place(id)) ? 'A card can go once both cards on it have gone.' : null),
+
   // A tap on a king takes it away; a tap on another card picks it to pair with the next one tapped (see table.js).
   pairs: true,
   tapTarget: (s, from) => (rankOf(playable(s, from) ?? 0) === 13 ? 'out' : null),

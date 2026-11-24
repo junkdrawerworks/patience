@@ -95,17 +95,25 @@ export class Table {
     const ch = Math.round(cw * 1.4);
     const left = Math.round((W - (cols * cw + (cols - 1) * gap)) / 2);
     const x = Array.from({ length: cols }, (_, i) => left + i * (cw + gap));
-    const m = { W, H, pad, gap, cw, ch, top: pad, tabY: pad + ch + rowGap, x, spot: {}, kind: {}, dir: {}, order: {}, step, layoutKey: this.layoutKey(s, step) };
-    L.top.forEach((p, i) => { m.spot[p.id] = x[p.col]; m.kind[p.id] = p.kind; m.dir[p.id] = p.dir || 1; m.order[p.id] = i; });
-    L.tableau.forEach((id, i) => { m.spot[id] = x[i]; m.kind[id] = 'column'; m.order[id] = 100 + i; });
-    m.piles = [...L.top.map(p => p.id), ...L.tableau];
+    const m = { W, H, pad, gap, cw, ch, top: pad, tabY: pad + ch + rowGap, x, spot: {}, y: {}, kind: {}, dir: {}, order: {}, names: {}, row: {}, under: {}, step, layoutKey: this.layoutKey(s, step) };
+    L.top.forEach((p, i) => { m.spot[p.id] = x[p.col]; m.y[p.id] = m.top; m.kind[p.id] = p.kind; m.dir[p.id] = p.dir || 1; m.order[p.id] = i; m.names[p.id] = p.name; });
+    L.tableau.forEach((id, i) => { m.spot[id] = x[i]; m.y[id] = m.tabY; m.kind[id] = 'column'; m.order[id] = 100 + i; });
+    // Places that hold a card each, anywhere below the top row (Pyramid's), each row half a card or a little more below
+    // the one before, as the room allows, so each card shows its top half.
+    const places = L.places || [], rows = places.reduce((n, p) => Math.max(n, p.row), 0);
+    const rowStep = rows ? clamp((H - pad - m.tabY - ch) / rows, ch * 0.5, ch * 0.6) : 0;
+    places.forEach((p, i) => {
+      m.spot[p.id] = left + p.col * (cw + gap); m.y[p.id] = m.tabY + p.row * rowStep;
+      m.kind[p.id] = 'place'; m.order[p.id] = 200 + i; m.row[p.id] = p.row; m.under[p.id] = p.under || [];
+    });
+    m.piles = [...L.top.map(p => p.id), ...places.map(p => p.id), ...L.tableau];
     m.dealFrom = L.dealFrom;
     this.m = m;
 
     // The empty places on the table, one per pile. Each is also the pile to a screen reader (see name()), so they come
     // before the cards, in the order they're laid out: the top row, then the columns from the left.
     for (const id of Object.keys(this.spots)) if (!(id in m.spot)) { this.spots[id].remove(); delete this.spots[id]; }
-    for (const p of [...L.top, ...L.tableau.map(id => ({ id, kind: 'column', label: L.empty }))]) {
+    for (const p of [...L.top, ...places.map(({ id }) => ({ id, kind: 'place' })), ...L.tableau.map(id => ({ id, kind: 'column', label: L.empty }))]) {
       let el = this.spots[p.id];
       if (!el) {
         el = document.createElement('div');
@@ -116,7 +124,7 @@ export class Table {
       }
       el.dataset.kind = p.kind;
       if (p.kind === 'stock') el.innerHTML = RECYCLE; else el.innerHTML = p.label ? `<span aria-hidden="true">${p.label}</span>` : '';
-      el.style.transform = `translate(${m.spot[p.id]}px, ${p.kind === 'column' ? m.tabY : m.top}px)`;
+      el.style.transform = `translate(${m.spot[p.id]}px, ${m.y[p.id]}px)`;
     }
     const spots = m.piles.map(id => this.spots[id]);
     if (spots.some((el, i) => this.el.children[i] !== el)) this.el.prepend(...spots);
@@ -157,7 +165,7 @@ export class Table {
     const room = m.H - m.pad - m.tabY - m.ch, spread = this.spreadFor(s, room);
     m.piles.forEach((id, pi) => {
       const kind = m.kind[id], { down, up } = game.pile(s, id), x0 = m.spot[id], dir = m.dir[id];
-      const z0 = kind === 'column' ? 2000 + pi * 100 : 200 * (pi + 1);
+      const z0 = kind === 'column' ? 2000 + pi * 100 : kind === 'place' ? 1000 + pi * 10 : 200 * (pi + 1);
       const put = (c, x, y, z, faceUp, index, isDeep) => at.set(c, { x, y, z, up: faceUp, pile: id, index, deep: isDeep });
 
       if (kind === 'stock') {
@@ -180,6 +188,9 @@ export class Table {
           const k = i - (up.length - fanned);
           put(c, x0 + (k > 0 ? k * step : 0), m.top, z0 + i, true, i, deep(i, up.length, Math.max(1, fanned) + 1));
         });
+      } else if (kind === 'place') {
+        // A card with a card on it hides its middle, as a covered card in a column does.
+        up.forEach((c, i) => { put(c, x0, m.y[id], z0 + i, true, i, false); at.get(c).covered = m.under[id].some(u => game.pile(s, u).up.length); });
       } else if (kind === 'stack') {
         up.forEach((c, i) => put(c, x0, m.top, z0 + i, true, i, !this.showAll && deep(i, up.length, 2)));
       } else if (kind === 'sets') {
@@ -231,7 +242,7 @@ export class Table {
     if (opts.deal && calm) { opts = { still: true }; this.dealDuration = 0; }
     const first = !this.state || this.v !== s.v;
     // A hint stays lit until the cards move: drawing the same table again (a new size, the deck moved) keeps it.
-    if (s !== this.state) { this.clearHint(); this.unflag(); this.showAll = false; }
+    if (s !== this.state) { this.clearHint(); this.unflag(); this.unchoose(); this.showAll = false; }
     this.state = s;
     if (first) this.setup(s);
     if (!this.m || this.m.layoutKey !== this.layoutKey(s, this.m.step)) this.layout();
@@ -332,8 +343,10 @@ export class Table {
     if (holding || this.held) this.aim();
     for (const id of m.piles) {
       if (m.kind[id] !== 'stock') continue;
-      const pile = this.game.pile(s, id), waste = this.game.pile(s, 'waste');
-      this.spots[id].classList.toggle('gone', !pile.down.length && !waste.up.length);
+      const pile = this.game.pile(s, id), passes = this.game.passes?.(s);
+      this.spots[id].classList.toggle('gone', !pile.down.length && !this.game.stock(s));
+      // How many more times it can be turned over, where that's limited (Pyramid), under its arrow.
+      this.spots[id].dataset.passes = passes === undefined || pile.down.length ? '' : passes;
     }
     if (opts.still || (first && !opts.deal)) { void this.el.offsetWidth; this.el.classList.remove('still'); }
   }
@@ -350,9 +363,13 @@ export class Table {
         cards = up;
         const n = m.order[id] - 99;
         label = !down.length && !up.length ? `Empty column ${n}` : `Column ${n}${down.length ? `, ${down.length} face down` : ''}`;
+      } else if (kind === 'place') {
+        // Pyramid's: only a place with a card in it is anything to a screen reader.
+        cards = up;
+        label = up.length ? `Row ${m.row[id] + 1}${m.under[id].some(u => g.pile(s, u).up.length) ? ', covered' : ''}` : null;
       } else if (kind === 'stock') {
-        const waste = g.pile(s, 'waste').up.length;
-        label = down.length ? `Deck, ${down.length} card${down.length === 1 ? '' : 's'}` : waste ? 'Deck empty, tap to turn the pile over' : 'Deck empty';
+        const passes = g.passes?.(s), more = passes ? `, ${passes === 1 ? 'once' : passes === 2 ? 'twice' : `${passes} times`} more` : '';
+        label = down.length ? `Deck, ${down.length} card${down.length === 1 ? '' : 's'}` : g.stock(s) ? `Deck empty, tap to turn the pile over${more}` : 'Deck empty';
       } else if (kind === 'deals') {
         const rows = Math.ceil(down.length / 10);
         label = rows ? `Deck, ${rows} row${rows === 1 ? '' : 's'} to deal` : 'Deck empty';
@@ -360,7 +377,10 @@ export class Table {
         label = `Cleared runs, ${up.length / 13} of 8`;
       } else if (kind === 'waste') {
         cards = up.slice(-Math.max(1, g.fan?.(s) || 0));
-        label = up.length ? 'Waste' : 'Waste, empty';
+        label = (m.names[id] || 'Waste') + (up.length ? '' : ', empty');
+      } else if (m.names[id]) {
+        cards = up.slice(-1);
+        label = m.names[id] + (up.length ? `, ${up.length} card${up.length === 1 ? '' : 's'}` : ', none yet');
       } else if (id[0] === 'c') {
         cards = up.slice(-1);
         label = up.length ? 'Free cell' : 'Free cell, empty';
@@ -370,6 +390,7 @@ export class Table {
       }
       cards.forEach(c => said.add(c));
       const el = this.spots[id];
+      attr(el, 'aria-hidden', label === null ? 'true' : null);
       attr(el, 'role', cards.length ? 'group' : 'img');
       attr(el, 'aria-label', label);
       attr(el, 'aria-owns', cards.length ? cards.map(c => 'card-' + c).join(' ') : null);
@@ -429,7 +450,7 @@ export class Table {
     else if (spot) { pile = spot.dataset.pile; index = -1; }
     const kind = pile && m.kind[pile];
     this.on.touched(kind === 'stock' || kind === 'deals');
-    if (!pile) return;
+    if (!pile) { this.unchoose(); return; }
 
     if (kind === 'stock' || kind === 'deals') { this.on.stock(); return; }
     if (kind === 'sets') return;
@@ -475,6 +496,7 @@ export class Table {
       if (Math.hypot(dx, dy) < (d.mouse ? 4 : 8)) return;
       d.moved = true;
       this.clearHint();
+      this.unchoose();
       d.cards.forEach((c, i) => { this.land(c); const el = this.cards.get(c); el.classList.add('drag'); el.style.zIndex = 9000 + i; });
       // The card they were on shows its middle while they're held off it (see render()).
       this.cards.get(this.beneathHeld(d, this.state))?.classList.remove('covered');
@@ -547,7 +569,7 @@ export class Table {
       const h = this.shown;
       if (h && !h.stock && d.pile === h.from && d.n === h.n) this.on.move(d.pile, d.n, h.to);
       else if (h && !h.stock && d.pile === h.to && d.n === 1) this.on.move(h.from, h.n, h.to);
-      else this.on.tap(d.pile, d.n);
+      else this.tapped(d.pile, d.n);
       return;
     }
     this.flyNext = new Set(d.cards);
@@ -555,6 +577,31 @@ export class Table {
     if (over && this.game.canDrop(this.state, d.cards, over)) { this.on.move(d.pile, d.n, over); return; }
     this.render(this.state);
     if (over) this.on.refused?.({ from: d.pile, cards: d.cards, to: over });
+  }
+
+  // A tap on cards that could be picked up: wherever the game sends them, or, in a game of pairs (Pyramid), choosing.
+  tapped(pile, n) {
+    if (this.game.pairs) this.choose(pile); else this.on.tap(pile, n);
+  }
+
+  // In a game of pairs, a tap picks a card to pair with the next one tapped, standing it up a little; a tap on a card it
+  // pairs with takes the two of them, a tap on it again lets it go, and a tap on another card picks that one instead.
+  // A card that goes by itself (Pyramid's kings) goes at once, and one with nothing it could pair with shakes.
+  choose(pile) {
+    const g = this.game, s = this.state, was = this.chosen;
+    this.unchoose();
+    if (was?.pile === pile) { this.on.held?.([]); return; }
+    if (was && g.canDrop(s, was.cards, pile)) { this.on.move(was.pile, 1, pile); return; }
+    const cards = g.lift(s, pile, g.pile(s, pile).up.length - 1);
+    if (!cards || g.tapTarget(s, pile, 1) || !g.targets(s).some(t => t !== pile && g.canDrop(s, cards, t))) { this.on.tap(pile, 1); return; }
+    this.chosen = { pile, cards };
+    cards.forEach(c => this.cards.get(c).classList.add('chosen'));
+    this.on.held?.(cards);
+  }
+
+  unchoose() {
+    this.chosen?.cards.forEach(c => this.cards.get(c)?.classList.remove('chosen'));
+    this.chosen = null;
   }
 
   // Where the dragged cards go when let go: the pile they're most over, if they may go there (see overPile).
@@ -585,7 +632,7 @@ export class Table {
   // The area that counts as dropping onto a pile: a column's whole length, or the pile's spot.
   zone(id) {
     const m = this.m, g = m.gap / 2;
-    if (m.kind[id] !== 'column') return { x: m.spot[id] - g, y: m.top - g, w: m.cw + 2 * g, h: m.ch + 2 * g };
+    if (m.kind[id] !== 'column') return { x: m.spot[id] - g, y: m.y[id] - g, w: m.cw + 2 * g, h: m.ch + 2 * g };
     const { down, up } = this.game.pile(this.state, id);
     const last = up.length ? up[up.length - 1] : down[down.length - 1];
     const bottom = (last !== undefined ? this.at.get(last).y : m.tabY) + m.ch;
@@ -599,12 +646,18 @@ export class Table {
   // would; Space picks the cards up from there (`held`, like a drag: { pile, n, cards }), and again puts them down where
   // the arrows have taken them, outlined while they can go there.
 
-  // The top row as the arrow keys go along it, from the left: Spider's cleared runs are left out, being for looking at.
+  // The top row as the arrow keys go along it, from the left: Spider's cleared runs are left out, being for looking at
+  // (and Pyramid's places, being below it).
   get topRow() {
     const m = this.m;
-    return m.piles.filter(id => m.kind[id] !== 'column' && m.kind[id] !== 'sets').sort((a, b) => this.xOf(a) - this.xOf(b));
+    return m.piles.filter(id => m.kind[id] !== 'column' && m.kind[id] !== 'sets' && m.kind[id] !== 'place').sort((a, b) => this.xOf(a) - this.xOf(b));
   }
   get columns() { return this.m.piles.filter(id => this.m.kind[id] === 'column'); }
+  // What's below the top row: the columns, or else the places with a card in them (Pyramid's).
+  get lower() {
+    const cols = this.columns;
+    return cols.length ? cols : this.m.piles.filter(id => this.m.kind[id] === 'place' && this.topOf(id) >= 0);
+  }
 
   // Where a pile is across the table: its top card, which in a fanned waste is further right than the pile's place.
   xOf(id) {
@@ -629,11 +682,12 @@ export class Table {
     const c = this.cursor;
     if (!c) {
       const h = this.shown;
-      if (h) this.pointAtHint(h); else this.point(this.columns[0]);
+      if (h) this.pointAtHint(h); else if (this.lower.length) this.point(this.lower[0]); else this.point(this.topRow[0]);
       return;
     }
-    const isCol = this.m.kind[c.pile] === 'column', row = isCol ? this.columns : this.topRow;
     const nearest = ids => ids.reduce((a, b) => (Math.abs(this.xOf(b) - this.xOf(c.pile)) < Math.abs(this.xOf(a) - this.xOf(c.pile)) ? b : a));
+    if (this.m.kind[c.pile] === 'place' || (dir === 'down' && this.m.kind[c.pile] !== 'column' && !this.columns.length)) { this.steerPlaces(dir, nearest); return; }
+    const isCol = this.m.kind[c.pile] === 'column', row = isCol ? this.columns : this.topRow;
     if (dir === 'left' || dir === 'right') {
       const next = row[row.indexOf(c.pile) + (dir === 'left' ? -1 : 1)];
       if (next) this.point(next);
@@ -643,6 +697,26 @@ export class Table {
       else if (isCol && this.topRow.length) this.point(nearest(this.topRow));
     } else if (!isCol) this.point(nearest(this.columns));
     else if (!this.held && c.index < this.topOf(c.pile)) this.point(c.pile, c.index + 1);
+  }
+
+  // The arrow keys among places with a card each (Pyramid's): along a row, or to the nearest card in the next row up or
+  // down that has one, and from the top row down to the nearest card in the highest such row.
+  steerPlaces(dir, nearest) {
+    const m = this.m, c = this.cursor, cards = this.lower, x = this.xOf(c.pile);
+    const r = m.kind[c.pile] === 'place' ? m.row[c.pile] : -1;
+    const rowNext = (list, pick) => {
+      if (!list.length) return null;
+      const rr = pick(...list.map(id => m.row[id]));
+      return nearest(list.filter(id => m.row[id] === rr));
+    };
+    let next = null;
+    if (dir === 'left' || dir === 'right') {
+      const along = cards.filter(id => m.row[id] === r && (dir === 'left' ? this.xOf(id) < x : this.xOf(id) > x));
+      next = along.length ? along.reduce((a, b) => (Math.abs(this.xOf(b) - x) < Math.abs(this.xOf(a) - x) ? b : a)) : null;
+    } else if (dir === 'up') {
+      next = rowNext(cards.filter(id => m.row[id] < r), Math.max) ?? (this.topRow.length ? nearest(this.topRow) : null);
+    } else next = rowNext(cards.filter(id => m.row[id] > r), Math.min);
+    if (next) this.point(next);
   }
 
   // 1 to 9, and 0 for the tenth: that column's top card.
@@ -676,7 +750,7 @@ export class Table {
     }
     if (h && c.pile === h.from && cards.length === h.n) this.on.move(c.pile, cards.length, h.to);
     else if (hintedTo && cards.length === 1) this.on.move(h.from, h.n, h.to);
-    else this.on.tap(c.pile, cards.length);
+    else this.tapped(c.pile, cards.length);
   }
 
   // Space: pick up the cards from the chosen card (the deck: draw, or deal a row), or put down the cards held.
@@ -750,7 +824,7 @@ export class Table {
         const next = col && c.index >= 0 && this.at.get(up[c.index + 1]);
         // (A covered card's ring stops where the next card starts, clear of that card's rank.)
         box = { x: p.x, y: p.y, h: next ? next.y - p.y - 4 : m.ch };
-      } else box = { x: m.spot[c.pile], y: col ? m.tabY : m.top, h: m.ch };
+      } else box = { x: m.spot[c.pile], y: m.y[c.pile], h: m.ch };
       if (c.index >= 0) named = this.cards.get(up[c.index]);
       if (!named || named.getAttribute('aria-hidden')) named = this.spots[c.pile];
     }

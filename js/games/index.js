@@ -7,13 +7,17 @@
 // adds and every move carries along as it is, as it does anything else in a state it doesn't know.
 //
 //   deal(n, v)              a new game: deal number n of way v
-//   layout(s, left)         where the piles go: { cols, rows?, split?, top: [{ id, col, kind, label?, dir? }], tableau: [ids],
-//                           empty?, dealFrom } (rows: how many card heights a long column needs, for sizing the cards on a
-//                           short screen; split: a top-row column with a faint line before it, setting its piles apart from
-//                           the ones before it, as FreeCell's foundations from its free cells; label and empty: a faint
-//                           letter in an empty place, a top-row one's or every column's, for the card that starts it)
+//   layout(s, left)         where the piles go: { cols, rows?, split?, top: [{ id, col, kind, label?, dir?, name? }],
+//                           places?: [{ id, col, row, under }], tableau: [ids], empty?, dealFrom } (rows: how many card
+//                           heights a long column needs, for sizing the cards on a short screen, or the whole table needs;
+//                           split: a top-row column with a faint line before it, setting its piles apart from the ones
+//                           before it, as FreeCell's foundations from its free cells; label and empty: a faint letter in an
+//                           empty place, a top-row one's or every column's, for the card that starts it; name: what a
+//                           screen reader calls a top-row pile that isn't what its kind says; places: piles of one card
+//                           each below the top row (Pyramid's), at a column that can be a half, row by row a little over
+//                           half a card apart, with the places resting on each, which hide its middle)
 //                           kinds: 'stock' and 'deals' (tap to draw or deal), 'waste', 'stack' (foundations, free cells),
-//                           'sets' (Spider's cleared runs), and 'column' for the tableau
+//                           'sets' (Spider's cleared runs), 'place' for places, and 'column' for the tableau
 //   pile(s, id)             the cards in a pile: { down: [...], up: [...] }, bottom to top
 //   fan(s)                  how many waste cards are spread out (drawing three); only Klondike has it
 //   cardIds(s)              every card in this game
@@ -23,11 +27,17 @@
 //   move(s, from, n, to)    the new state, or null if the rules say no
 //   stock(s)                the new state after tapping the stock, or null; stockNote(s) says why not, if it matters:
 //                           { text, piles }, piles being any to light up (the empty columns Spider wants filled)
-//   dropNote(s, cards, to)  only Klondike and FreeCell: why cards let go on pile `to` can't go there, if it's a rule a
-//                           newcomer mightn't know, or null (a king for an empty Klondike column; room for a FreeCell run)
-//   liftNote(s, id, index)  only Spider: why the cards from face-up card `index` of a pile up can't be picked up, or null;
-//                           said the first time in a deal that they're dragged anyway (a tap only shakes them)
+//   passes(s)               only Pyramid: how many more times the stock can be turned back over, where that's limited
+//   turned(s)               only Pyramid: the card the last tap on the stock turned up, where that isn't the waste's top
+//   dropNote(s, cards, to)  only Klondike, FreeCell and Pyramid: why cards let go on pile `to` can't go there, if it's a
+//                           rule a newcomer mightn't know, or null (a king for an empty Klondike column; room for a FreeCell
+//                           run; a Pyramid pair adding up to 13)
+//   liftNote(s, id, index)  only Spider and Pyramid: why the cards from face-up card `index` of a pile up can't be picked
+//                           up, or null; said the first time in a deal that they're dragged anyway (a tap only shakes them)
+//                           (a run of more than one suit; a covered Pyramid card)
 //   tapTarget(s, from, n)   where a tap sends the top n cards of a pile, or null
+//   pairs                   only Pyramid: cards go in pairs, so a tap on a card that tapTarget sends nowhere picks it to
+//                           pair with the next card tapped (canDrop says which it pairs with; see choose() in table.js)
 //   autoStep(s)             a card that can go up by itself because nothing could need it, or null
 //   won(s), finishable(s), finishStep(s)    finished; ready to finish by itself; the next card when it does, as a move,
 //                           or { stock: true } to tap the stock (Klondike drawing one, when no card fits)
@@ -41,8 +51,8 @@
 //   firstMoves() on either search: every first move, the most promising first, for when the best one leads back
 //   lostStands              only Klondike: if searchAll runs out too, the first search's "no way to win" stands; without
 //                           it, Hint suggests the move that looked best
-//   fromSolver(s, m)        a solver move as a table move: { from, n, to }, or { stock: true } (Klondike adds c, the card
-//                           it's drawing for; so does its easyHint)
+//   fromSolver(s, m)        a solver move as a table move: { from, n, to }, or { stock: true } (Klondike and Pyramid add c,
+//                           the card it's drawing for; so does Klondike's easyHint)
 //   upAlready(s, m)         whether a solver move sending a card up is done already, the card having gone up by itself
 //                           (Klondike and FreeCell only, the games where cards go up by themselves)
 //   deadEnd(s, { auto })    a look for anything that can still help, run a slice at a time like the searches
@@ -62,6 +72,7 @@
 import { klondike } from './klondike.js';
 import { freecell } from './freecell.js';
 import { spider } from './spider.js';
+import { pyramid } from './pyramid.js';
 
 export const VARIANTS = {
   k1: { game: klondike, name: 'Klondike', detail: 'draw one' },
@@ -70,6 +81,7 @@ export const VARIANTS = {
   s1: { game: spider, name: 'Spider', detail: 'one suit' },
   s2: { game: spider, name: 'Spider', detail: 'two suits' },
   s4: { game: spider, name: 'Spider', detail: 'four suits' },
+  py: { game: pyramid, name: 'Pyramid', detail: '' },
 };
 
 export const gameOf = s => VARIANTS[s.v].game;

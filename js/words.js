@@ -22,13 +22,26 @@ function where(g, s, to) {
 // A move `m` the player made from table a, making table b: { from, n, to }, or { stock: true } for the deck.
 export function moveWords(g, a, b, m) {
   let first;
-  if (!m.stock) first = cap(`${what(g.pile(a, m.from).up.slice(-m.n))} ${where(g, a, m.to)}.`);
+  if (g.pairs) first = pairWords(g, a, b, m);
+  else if (!m.stock) first = cap(`${what(g.pile(a, m.from).up.slice(-m.n))} ${where(g, a, m.to)}.`);
   else if (!Array.isArray(a.waste)) first = 'Dealt a row.';
   else if (b.waste.length > a.waste.length) {
     const n = b.waste.length - a.waste.length, top = shortName(b.waste[b.waste.length - 1]);
     first = n === 1 ? `Drew the ${top}.` : `Drew ${COUNT[n] || n}, with the ${top} on top.`;
   } else first = 'Turned the pile back over.';
   return [first, ...aftermath(g, a, b)].join(' ');
+}
+
+// The same in Pyramid: "6 of hearts and 7 of clubs taken away." "Turned up the jack of spades." "Turned the pile back
+// over, for the last time through."
+const TIMES = ['', 'first', 'second', 'third'];
+function pairWords(g, a, b, m) {
+  if (m.stock) {
+    if (b.drawn.length) return `Turned up the ${shortName(b.drawn[0])}.`;
+    return `Turned the pile back over, for the ${g.passes(b) ? TIMES[b.pass] || b.pass : 'last'} time through.`;
+  }
+  const c = g.pile(a, m.from).up.slice(-1)[0], d = m.to === 'out' ? null : g.pile(a, m.to).up.slice(-1)[0];
+  return cap(`${shortName(c)}${d === null ? '' : ` and ${shortName(d)}`} taken away.`);
 }
 
 // What else changed from table a to b, on top of the cards moved: runs cleared away (Spider), cards turned over.
@@ -65,6 +78,11 @@ export const heldWords = cards => (cards.length ? `Holding the ${what(cards)}.` 
 
 // Hint's move `h` in table s: "Hint: the queen of hearts onto the king of clubs."
 export function hintWords(g, s, h) {
+  if (g.pairs) {
+    if (h.stock) return s.stock.length ? 'Hint: turn up a card.' : 'Hint: turn the pile back over.';
+    const c = g.pile(s, h.from).up.slice(-1)[0], d = h.to === 'out' ? null : g.pile(s, h.to).up.slice(-1)[0];
+    return d === null ? `Hint: take away the ${shortName(c)}.` : `Hint: the ${shortName(c)} with the ${shortName(d)}.`;
+  }
   if (h.stock) return !Array.isArray(s.waste) ? 'Hint: deal a row.' : s.stock.length ? 'Hint: draw a card.' : 'Hint: turn the pile back over.';
   return `Hint: the ${what(g.pile(s, h.from).up.slice(-h.n))} ${where(g, s, h.to)}.`;
 }

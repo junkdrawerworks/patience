@@ -8,9 +8,9 @@
     try { const look = JSON.parse(localStorage.getItem('patience.v1')).settings.look; if (look === 'light' || look === 'dark') document.documentElement.dataset.theme = look; } catch { /* none saved */ }
   </script>
   <title>Patience</title>
-  <meta name="description" content="Klondike, FreeCell and Spider solitaire with no ads and no account. Tap or drag, undo as much as you like, and only get deals that can be won. Works offline.">
+  <meta name="description" content="Klondike, FreeCell, Spider and Pyramid solitaire with no ads and no account. Tap or drag, undo as much as you like, and only get deals that can be won. Works offline.">
   <meta property="og:title" content="Patience">
-  <meta property="og:description" content="Klondike, FreeCell and Spider with no ads. Every deal can be won, and it works offline.">
+  <meta property="og:description" content="Klondike, FreeCell, Spider and Pyramid with no ads. Every deal can be won, and it works offline.">
   <meta property="og:image" content="https://patience.junkdrawer.works/og.png">
   <meta property="og:url" content="https://patience.junkdrawer.works/">
   <meta name="twitter:card" content="summary_large_image">
@@ -83,6 +83,11 @@
           <div class="row"><button type="button" class="choice" data-v="s1">One suit</button><button type="button" class="choice" data-v="s2">Two suits</button><button type="button" class="choice" data-v="s4">Four suits</button></div>
           <p class="aside">Four-colour suits, in the menu, make the suits easier to tell apart.</p>
         </div>
+        <div class="pick">
+          <h3>Pyramid</h3>
+          <p>Take away pairs that add up to 13, a queen with an ace, and kings on their own, once nothing covers them. Clear the pyramid to win.</p>
+          <div class="row"><button type="button" class="choice" data-v="py">Play Pyramid</button></div>
+        </div>
       </div>
       <div class="plains">
         <button type="button" class="plain" id="b-restart">Start this deal again</button>
@@ -107,6 +112,7 @@
         <option value="s1">Spider, one suit</option>
         <option value="s2">Spider, two suits</option>
         <option value="s4">Spider, four suits</option>
+        <option value="py">Pyramid</option>
       </select>
       <dl class="stats" id="stats"></dl>
       <p class="note" id="unkept" hidden>This browser isn't keeping your games, so your record won't be here next time.</p>
@@ -120,7 +126,7 @@
       <label class="toggle"><input type="checkbox" id="o-auto" aria-labelledby="o-auto-name" aria-describedby="o-auto-says"><span><b id="o-auto-name">Send cards up by themselves</b> <span id="o-auto-says">Once nothing on the table could still need a card, it goes to its foundation. In Klondike and FreeCell; Spider always clears a finished run by itself.</span></span></label>
       <label class="toggle"><input type="checkbox" id="o-clock"><span><b>Show time and moves</b></span></label>
       <label class="toggle"><input type="checkbox" id="o-four" aria-labelledby="o-four-name" aria-describedby="o-four-says"><span><b id="o-four-name">Four-colour suits</b> <span id="o-four-says">Clubs green and diamonds blue, so all four suits look different.</span></span></label>
-      <label class="toggle"><input type="checkbox" id="o-left" aria-labelledby="o-left-name" aria-describedby="o-left-says"><span><b id="o-left-name">Deck on the left</b> <span id="o-left-says">In Klondike and Spider the deck sits on the right, under your thumb, unless you'd rather have it here.</span></span></label>
+      <label class="toggle"><input type="checkbox" id="o-left" aria-labelledby="o-left-name" aria-describedby="o-left-says"><span><b id="o-left-name">Deck on the left</b> <span id="o-left-says">In Klondike, Spider and Pyramid the deck sits on the right, under your thumb, unless you'd rather have it here.</span></span></label>
       <fieldset class="look" aria-describedby="look-says">
         <legend><b>Look</b> <span id="look-says">Light or dark, or whatever your phone is set to.</span></legend>
         <div class="seg">
@@ -161,7 +167,17 @@
             <li>Any card or run of one suit can go in an empty column.</li>
           </ul>
         </details>
-        <p class="small">In every game, tap a card to send it to the best place, or drag it where you want it. Hint lights up a card and where it goes: tap either one and the move is played. On a keyboard: the arrow keys choose a card, and <kbd>1</kbd> to <kbd>9</kbd> and <kbd>0</kbd> a column. <kbd>Enter</kbd> does what a tap there would; <kbd>Space</kbd> picks the cards up, and again puts them down where the arrows have taken them; <kbd>Esc</kbd> puts them back. With nothing chosen, <kbd>Space</kbd> uses the deck in Klondike and Spider. <kbd>Z</kbd> undoes, <kbd>H</kbd> gives a hint, <kbd>Enter</kbd> plays it and <kbd>N</kbd> opens New game (<kbd>Enter</kbd> there deals another of the same).</p>
+        <details data-game="pyramid">
+          <summary>Pyramid</summary>
+          <ul>
+            <li>Take away cards in pairs that add up to 13: a queen (12) with an ace, a jack (11) with a 2, a 10 with a 3, and so on to a 7 with a 6. A king is 13 already, so it goes on its own.</li>
+            <li>Only a card with nothing on it can go: in the pyramid, once both cards resting on it have gone.</li>
+            <li>Tap a card, then the card it pairs with, or drag one onto the other. Tap a king and it goes.</li>
+            <li>Tap the deck to turn a card up. It can pair with a card in the pyramid, or with the top card of the waste beside it, where the card turned up before it went.</li>
+            <li>You can go through the deck three times; the number on the empty deck says how many more. Clear the pyramid to win, whatever is left in the deck.</li>
+          </ul>
+        </details>
+        <p class="small">In every game, tap a card to send it to the best place, or drag it where you want it. Hint lights up a card and where it goes: tap either one and the move is played. On a keyboard: the arrow keys choose a card, and <kbd>1</kbd> to <kbd>9</kbd> and <kbd>0</kbd> a column. <kbd>Enter</kbd> does what a tap there would; <kbd>Space</kbd> picks the cards up, and again puts them down where the arrows have taken them; <kbd>Esc</kbd> puts them back. With nothing chosen, <kbd>Space</kbd> uses the deck in Klondike, Spider and Pyramid. <kbd>Z</kbd> undoes, <kbd>H</kbd> gives a hint, <kbd>Enter</kbd> plays it and <kbd>N</kbd> opens New game (<kbd>Enter</kbd> there deals another of the same).</p>
       </div>
       <p class="small">No ads, no account. Your games and your record stay on this device, and once it has loaded it works with no signal. Add it to your home screen to keep it like an app.</p>
       <div class="keep">

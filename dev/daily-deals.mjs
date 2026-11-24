@@ -1,5 +1,5 @@
 // Finds the deals for Today's deal, one a day for each way of playing, for js/games/daily-deals.js:
-//   node dev/daily-deals.mjs [k1|k3|fc|s1|s2|s4|all] [days]
+//   node dev/daily-deals.mjs [k1|k3|fc|s1|s2|s4|py|all] [days]
 // Each is one the solver wins in the limit the game checks its own deals with, so every phone gets one that can be
 // won without solving anything itself. Lists only ever grow: the days already there keep their deals, and new ones go
 // on the end (366 days unless you say how many). The dates come from DAILY_START, which stays as it is.
@@ -23,7 +23,7 @@ if (process.argv[2] === '--check') {
 
 const which = process.argv[2] || 'all', DAYS = +(process.argv[3] || 366);
 const ways = which === 'all' ? Object.keys(VARIANTS) : [which];
-if (!ways.every(v => VARIANTS[v]) || !(DAYS > 0)) { console.error('usage: node dev/daily-deals.mjs k1|k3|fc|s1|s2|s4|all [days]'); process.exit(1); }
+if (!ways.every(v => VARIANTS[v]) || !(DAYS > 0)) { console.error('usage: node dev/daily-deals.mjs k1|k3|fc|s1|s2|s4|py|all [days]'); process.exit(1); }
 const lists = Object.fromEntries(Object.keys(VARIANTS).map(v => [v, (DAILY_DEALS[v] ?? []).slice()]));
 for (const v of ways) {
   const game = VARIANTS[v].game, list = lists[v], taken = new Set([...list, ...READY_DEALS[v]]);

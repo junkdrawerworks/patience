@@ -53,7 +53,7 @@ let lastWritten = stored(); // the save as this page last read or wrote it, to t
 const saved = read(lastWritten);
 const settings = settingsOf(saved.settings);
 const stats = Object.fromEntries(Object.keys(VARIANTS).map(v => [v, record(saved.stats?.[v])]));
-// The games this phone has said its first word on (see firstWord()): 'klondike', 'freecell', 'spider'.
+// The games this phone has said its first word on (see firstWord()): 'klondike', 'freecell', 'spider', 'pyramid'.
 const introduced = new Set(Array.isArray(saved.introduced) ? saved.introduced.filter(g => typeof g === 'string') : []);
 // This save's own name, made up the first time, which goes in a copy of the record so the copy isn't brought back
 // here, and the names of the copies brought back already, so none is added twice (see bringBack()).
@@ -135,7 +135,7 @@ function act(next, m) {
   news = { said: [moveWords(G(), game, next, m)], up: [], later: [] };
   set(next);
   if (awaited !== null) {
-    if (next.waste?.at(-1) !== awaited && !G().won(game)) drawFor(awaited, true);
+    if ((G().turned ? G().turned(next) : next.waste?.at(-1)) !== awaited && !G().won(game)) drawFor(awaited, true);
     else hideToast();
   }
   return true;
@@ -390,6 +390,7 @@ const FIRST_WORDS = {
   klondike: 'Tap a card to send it where it fits, or drag it. Red on black, down to the ace.',
   freecell: 'Park a card in a free cell, top left. Any card can go in an empty column.',
   spider: 'Tap the deck to deal a row. Runs of one suit, king to ace, clear away.',
+  pyramid: 'Tap two cards that add up to 13, a queen and an ace, say. Kings go alone.',
 };
 const phone = matchMedia('(pointer: coarse)');
 function firstWord() {
@@ -1194,7 +1195,7 @@ function playable(g) {
 }
 
 // Whether a saved state has the shape a new deal of its game has, enough to play from: the same piles, each a list
-// (the columns, foundations and free cells as many as a deal has), the same draw, and a count of moves. With `of`, it
+// (the columns, foundations, free cells and Pyramid's places as many as a deal has), the same draw, and a count of moves. With `of`, it
 // must also be from the same game, as an Undo history entry is.
 function sound(s, of) {
   if (!isObj(s) || !Object.hasOwn(VARIANTS, s.v) || (of && (s.v !== of.v || s.deal !== of.deal))) return false;
@@ -1205,9 +1206,10 @@ function sound(s, of) {
     if (k === 'draw') return y === x;
     if (typeof x === 'number') return Number.isInteger(y) && y >= 0;
     if (!Array.isArray(y)) return false;
-    if (k === 'stock' || k === 'waste' || k === 'sets') return true;
+    if (k === 'stock' || k === 'waste' || k === 'sets' || k === 'drawn' || k === 'out') return true;
     if (y.length !== x.length) return false;
     if (k === 'cells') return true;
+    if (k === 'pyr') return y.every(c => c === null || Number.isInteger(c));
     return y.every(p => (Array.isArray(x[0]) ? Array.isArray(p) : isObj(p) && Array.isArray(p.down) && Array.isArray(p.up)));
   });
 }

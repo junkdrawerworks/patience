@@ -1,7 +1,7 @@
 // Finds deals the solver can win for one way of playing, for js/games/ready-deals.js:  node dev/ready-deals.mjs k3 [how many]
 // node dev/ready-deals.mjs --check  checks every deal in every list instead (about a minute and a half).
 // The game finds its own as you play; these are so the first game of each way doesn't have to wait. Rewrites that way's
-// list (k1, k3, fc, s1, s2 or s4) and leaves the others as they are. The numbers are picked at random from the same
+// list (k1, k3, fc, s1, s2, s4 or py) and leaves the others as they are. The numbers are picked at random from the same
 // range the game picks from (randomDeal), so a list isn't just the first few deals.
 import { writeFile } from 'node:fs/promises';
 import { VARIANTS } from '../js/games/index.js';
@@ -18,7 +18,7 @@ if (process.argv[2] === '--check') {
 }
 
 const v = process.argv[2], WANT = +(process.argv[3] || 50);
-if (!VARIANTS[v]) { console.error('usage: node dev/ready-deals.mjs k1|k3|fc|s1|s2|s4 [how many]'); process.exit(1); }
+if (!VARIANTS[v]) { console.error('usage: node dev/ready-deals.mjs k1|k3|fc|s1|s2|s4|py [how many]'); process.exit(1); }
 // Checked with the same limit as the deals the game finds itself, which Hint gets too, so its first press knows the way.
 const game = VARIANTS[v].game, MAX = game.budget.deal, found = new Set(), tried = new Set();
 while (found.size < WANT) {

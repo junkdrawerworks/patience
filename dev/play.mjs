@@ -17,8 +17,8 @@ export async function playInto({ v, n, steps, ms = 0 }) {
     past.push(s);
     if (ui.stock) {
       s = game.stock(s);
-      // In Klondike a card deeper in the stock takes several draws before it can be played.
-      if (!(v[0] === 'k' && (m.k === 2 || m.k === 3))) i++;
+      // In Klondike and Pyramid a card deeper in the stock (c) takes several draws before it can be played.
+      if (ui.c === undefined) i++;
       continue;
     }
     s = game.move(s, ui.from, ui.n, ui.to);
