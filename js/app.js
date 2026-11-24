@@ -8,12 +8,15 @@ import { suitSprite } from './suits.js';
 import { shortName } from './cards.js';
 import { guardEdges } from './edge-guard.js';
 import { moveWords, aftermath, upWords, hintWords } from './words.js';
+import { DAILY_START, DAILY_DEALS } from './games/daily-deals.js';
 
 const KEY = 'patience.v1';
 const $ = id => document.getElementById(id);
 const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four: false, left: false, look: 'phone' };
 const LOOKS = ['phone', 'light', 'dark']; // Look in the menu: whatever the phone is set to, or light or dark whatever it says
-const blank = () => ({ played: 0, won: 0, streak: 0, best: 0, fastest: 0, fewest: 0 });
+// day: the last day a Today's deal was won (see dayOf()), 0 for none; dayTime: how long that win took; days: how many
+// days in a row it had been won, up to that one.
+const blank = () => ({ played: 0, won: 0, streak: 0, best: 0, fastest: 0, fewest: 0, day: 0, dayTime: 0, days: 0 });
 const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 const shapes = {}; // a new deal of each way of playing, for the shape of a saved game (see sound())
 
@@ -24,12 +27,27 @@ const settingsOf = saved => {
   if (!LOOKS.includes(s.look)) s.look = 'phone';
   return s;
 };
-// Counts are whole numbers (the fewest moves a win took among them, 0 for none yet), and the fastest win a time; none
-// of them below nothing.
+// Counts are whole numbers (the fewest moves a win took among them, 0 for none yet, and the day a number too), and the
+// fastest win and Today's deal's a time; none of them below nothing. A save from before Today's deal has none won.
+const TIMES = ['fastest', 'dayTime'];
 const record = r => Object.fromEntries(Object.entries(blank()).map(([k, zero]) => {
   const x = r?.[k];
-  return [k, Number.isFinite(x) && x >= 0 && (k === 'fastest' || Number.isInteger(x)) ? x : zero];
+  return [k, Number.isFinite(x) && x >= 0 && (TIMES.includes(k) || Number.isInteger(x)) ? x : zero];
 }));
+
+// ---- Today's deal ----
+// One deal a day for each way of playing, the same on every phone, from a list made in advance (js/games/daily-deals.js),
+// so every one can be won and nothing has to be solved here. The day is the phone's own: a number, counting from
+// 1 January 1970, so days in a row are a day apart. A game of Today's deal keeps the day it was dealt for, as `daily`.
+const dayOf = (d = new Date()) => Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5);
+const FIRST_DAY = Math.round(Date.parse(DAILY_START + 'T00:00:00Z') / 864e5);
+const dailyDeal = (v, day) => { const list = DAILY_DEALS[v], i = (day - FIRST_DAY) % list.length; return list[i < 0 ? i + list.length : i]; };
+// What a game is called: 'Today's deal' (or yesterday's, once midnight has passed), or else its deal number.
+function dealName(s, lower) {
+  const ago = s.daily ? dayOf() - s.daily : -1;
+  const name = ago === 0 ? 'Today’s deal' : ago === 1 ? 'Yesterday’s deal' : `Deal ${s.deal.toLocaleString('en-US')}`;
+  return lower ? name[0].toLowerCase() + name.slice(1) : name;
+}
 
 let lastWritten = stored(); // the save as this page last read or wrote it, to tell when another tab has saved since
 const saved = read(lastWritten);
@@ -249,9 +267,9 @@ function undo() {
   say('Undone.');
 }
 
-// A new game of way `v` (deal `number`, or the next one). Another way of playing, with a game waiting for it, carries on
-// with that game instead, unless a deal is asked for by its number.
-async function newGame(v, number) {
+// A new game of way `v` (deal `number`, or the next one; with `day`, that day's deal for Today's deal). Another way of
+// playing, with a game waiting for it, carries on with that game instead, unless a deal is asked for by its number.
+async function newGame(v, number, day) {
   if (number === undefined && game && v !== game.v && waiting[v]) { carryOn(v); return; }
   const ticket = ++dealing;
   // Chosen from a sheet or the won panel, the table takes focus, so the keyboard's Space and Enter play the new deal.
@@ -285,7 +303,7 @@ async function newGame(v, number) {
     delete waiting[v];
     putAside();
   }
-  start(g.deal(n, v));
+  start(day ? { ...g.deal(n, v), daily: day } : g.deal(n, v));
 }
 
 // The game on the table goes aside, Undo, clock and all, until its way of playing is chosen again. A game won is over,
@@ -315,7 +333,7 @@ function carryOn(v) {
   liftNoted = false;
   take(g);
   write();
-  say(`${label(v)}, deal ${game.deal.toLocaleString('en-US')}, as you left it.`);
+  say(`${label(v)}, ${dealName(game, true)}, as you left it.`);
   after();
   if (settings.winnable) dealer.prepare(v);
 }
@@ -330,7 +348,8 @@ function restart() {
   clearTimeout(slow);
   hideToast();
   table.locked = true;
-  start(G().deal(game.deal, game.v), true);
+  const s = G().deal(game.deal, game.v);
+  start(game.daily ? { ...s, daily: game.daily } : s, true);
 }
 
 // The table faded, and Hint and Undo off, while a new deal is being shuffled (see newGame).
@@ -347,7 +366,7 @@ function start(state, again) {
   game = state;
   history = [];
   news = null;
-  say(`${label(state.v)}, deal ${state.deal.toLocaleString('en-US')}.`);
+  say(`${label(state.v)}, ${dealName(state, true)}.`);
   // Starting the same deal again part way through keeps its clock (stopped until the next move), so a fastest win counts
   // all the time spent on that deal, not just the last try. Once it's won, starting it again is a new game with a new clock.
   if (again && counted) stopClock();
@@ -468,6 +487,14 @@ function recordWin() {
   stopClock();
   const st = stats[game.v];
   winNews = newsOf(st, elapsed, game.v);
+  if (game.daily > st.day) {
+    // Today's deal (or another day's, not won yet): the first win of it is that day's time. Days in a row count on.
+    st.days = game.daily === st.day + 1 ? st.days + 1 : 1;
+    st.day = game.daily;
+    st.dayTime = elapsed;
+    const done = `${dealName(game)} done${st.days > 1 ? `: ${st.days} days in a row` : ''}.`;
+    winNews = { text: winNews ? `${winNews.text} ${done}` : done, tile: winNews?.tile };
+  }
   if (!counted) st.played++;
   st.won++;
   st.streak++;
@@ -514,7 +541,7 @@ function victory() {
   showInfo(); // the last cards may have gone up by themselves; Undo goes off
   const st = stats[game.v];
 
-  $('won-line').textContent = `${label(game.v)}, deal\u00a0${game.deal.toLocaleString('en-US')}, in ${clock(elapsed)} and ${plural(game.moves, 'move')}.`;
+  $('won-line').textContent = `${label(game.v)}, ${dealName(game, true).replace(' ', '\u00a0')}, in ${clock(elapsed)} and ${plural(game.moves, 'move')}.`;
   $('won-stats').innerHTML = tiles([
     ['Won', `${st.won} of ${st.played}`],
     ['Streak', st.streak],
@@ -572,7 +599,7 @@ const plural = (n, word) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' 
 function showInfo() {
   if (!game) return;
   $('wait').hidden = true;
-  $('status').textContent = `${label(game.v)} · Deal ${game.deal.toLocaleString('en-US')}`;
+  $('status').textContent = `${label(game.v)} · ${dealName(game)}`;
   $('moves').textContent = plural(game.moves, 'move');
   $('time').textContent = clock(played());
   $('b-undo').disabled = !history.length || over();
@@ -604,6 +631,8 @@ function showStats(v) {
     ['Best streak', st.best.toLocaleString('en-US')],
     ['Fastest', st.fastest ? clock(st.fastest) : '–'],
     ['Fewest moves', st.fewest ? st.fewest.toLocaleString('en-US') : '–'],
+    ['Today’s deal', st.day === dayOf() ? `Won in ${clock(st.dayTime)}` : '–'],
+    ['Days in a row', (st.day >= dayOf() - 1 ? st.days : 0).toLocaleString('en-US')],
   ]);
 }
 
@@ -783,6 +812,10 @@ function bringBack(copy) {
     st.streak = Math.max(st.streak, r.streak);
     st.best = Math.max(st.best, r.best, st.streak);
     for (const k of ['fastest', 'fewest']) st[k] = st[k] && r[k] ? Math.min(st[k], r[k]) : st[k] || r[k];
+    // Today's deal: the later day won, with its time and days in a row; won on both phones the same day, the quicker
+    // time and the longer run.
+    if (r.day > st.day) Object.assign(st, { day: r.day, dayTime: r.dayTime, days: r.days });
+    else if (r.day && r.day === st.day) Object.assign(st, { dayTime: Math.min(st.dayTime, r.dayTime), days: Math.max(st.days, r.days) });
   }
   if (isObj(copy.settings)) {
     Object.assign(settings, settingsOf({ ...settings, ...copy.settings, variant: settings.variant }));
@@ -887,18 +920,18 @@ function askNoMore(focus) {
   if (focus) $('b-clear').focus({ preventScroll: true });
 }
 document.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => {
-  const n = askedFor();
-  if (n) newGame(b.dataset.v, n); else newGame(b.dataset.v);
+  const v = b.dataset.v, n = askedFor();
+  if (todayOn) todayFor(v).go();
+  else if (n) newGame(v, n);
+  else newGame(v);
 }));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
 
 function openNew() {
   hideToast();
   $('new-note').hidden = !inPlay();
-  $('deal-n').value = '';
-  $('by-number').hidden = true;
-  $('b-number').setAttribute('aria-expanded', 'false');
-  showChoices();
+  showToday(false);
+  showNumber(false);
   $('b-restart').hidden = !game || !game.moves;
   $('b-keep').textContent = game && over() ? 'Close' : 'Keep playing'; // a game won is over, so there's no playing on
   document.querySelectorAll('[data-v]').forEach(b => {
@@ -914,15 +947,16 @@ function openNew() {
 // and the deal is played as asked, without the check that it can be won.
 const askedFor = () => Number($('deal-n').value.replace(/\D/g, '').slice(0, 9)) || 0;
 const fmt = n => n.toLocaleString('en-US');
-// Under each game's name in the sheet: the deal a number typed would play (or how high its deals go, if it hasn't
-// one so high), or else Carry on, for another way of playing with a game waiting.
+// Under each game's name in the sheet: with Today's deal pressed, how today's deal of it stands; the deal a number typed
+// would play (or how high its deals go, if it hasn't one so high); or else Carry on, for another way of playing with a
+// game waiting.
 function showChoices() {
   const n = askedFor();
   document.querySelectorAll('[data-v]').forEach(b => {
     const v = b.dataset.v, last = VARIANTS[v].game.lastDeal;
     b.querySelector('.waits')?.remove();
-    b.disabled = n > last;
-    const words = n ? (n > last ? `Up to ${fmt(last)}` : `Deal ${fmt(n)}`) : waiting[v] && v !== game?.v ? 'Carry on' : '';
+    b.disabled = !todayOn && n > last;
+    const words = todayOn ? todayFor(v).line : n ? (n > last ? `Up to ${fmt(last)}` : `Deal ${fmt(n)}`) : waiting[v] && v !== game?.v ? 'Carry on' : '';
     if (!words) return;
     const line = document.createElement('span');
     line.className = 'waits';
@@ -935,14 +969,21 @@ function showChoices() {
     : `Choose a game for deal ${fmt(n)}. A deal by number isn’t checked first, so it may be one that can’t be won, as FreeCell’s 11,982 famously can’t.`;
 }
 $('deal-n').addEventListener('input', showChoices);
-// By number opens the field, and closes it again, leaving the games as they were.
-$('b-number').addEventListener('click', () => {
-  const open = $('by-number').hidden;
+// By number opens the field, and closes it again, leaving the games as they were. Today's deal and By number don't go
+// together: pressing one lets the other go.
+function showNumber(open) {
   $('by-number').hidden = !open;
   $('b-number').setAttribute('aria-expanded', String(open));
+  $('deal-n').value = '';
+  if (open) showToday(false);
+  showChoices();
+}
+$('b-number').addEventListener('click', () => {
+  const open = $('by-number').hidden;
+  showNumber(open);
   if (open) $('deal-n').focus();
-  else { $('deal-n').value = ''; showChoices(); }
 });
+
 // Enter (Go on a phone's keyboard) plays the deal in the way of playing the sheet opened on.
 $('deal-n').addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.isComposing) return;
@@ -950,6 +991,24 @@ $('deal-n').addEventListener('keydown', e => {
   const n = askedFor(), v = game?.v || settings.variant;
   if (n && n <= VARIANTS[v].game.lastDeal) newGame(v, n);
 });
+
+// Today's deal, pressed, turns each game's button into today's deal of it, saying how it stands: Won in 3:12, Carry on
+// (it's waiting), Playing (it's on the table), or else Today's deal. `go` is what pressing it does.
+let todayOn = false;
+function todayFor(v) {
+  const day = dayOf(), st = stats[v];
+  if (game?.v === v && game.daily === day && !over()) return { line: 'Playing', go: closeSheets };
+  if (game?.v !== v && waiting[v]?.state.daily === day) return { line: 'Carry on', go: () => carryOn(v) };
+  return { line: st.day === day ? `Won in ${clock(st.dayTime)}` : 'Today’s deal', go: () => newGame(v, dailyDeal(v, day), day) };
+}
+function showToday(on) {
+  todayOn = on;
+  $('b-today').setAttribute('aria-pressed', String(on));
+  $('today-says').hidden = !on;
+  if (on && !$('by-number').hidden) showNumber(false);
+  showChoices();
+}
+$('b-today').addEventListener('click', () => showToday(!todayOn));
 
 let opener = null;
 function openSheet(id) {

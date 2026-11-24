@@ -51,11 +51,13 @@
     <section class="panel" role="dialog" aria-modal="true" aria-labelledby="new-title">
       <div class="panel-head new-head">
         <h2 id="new-title">New game</h2>
+        <div class="today-row"><button type="button" class="today" id="b-today" aria-pressed="false" aria-describedby="today-says">Today’s deal</button></div>
         <div class="head-acts">
           <button type="button" class="small-plain" id="b-number" aria-expanded="false" aria-controls="by-number">By number</button>
           <button type="button" class="small-plain" id="b-howto">How to play</button>
         </div>
       </div>
+      <p id="today-says" hidden>The same deal on every phone today, one for each game, and every one can be won.</p>
       <div id="by-number" hidden>
         <div class="by-number">
           <label for="deal-n">Deal number</label>

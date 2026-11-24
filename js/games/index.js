@@ -3,7 +3,8 @@
 // Every game is an object with the same parts, so the table and the rest of the app don't need to know which it is.
 // A few parts only some games have, and the rest of the app does without them where a game doesn't (marked below).
 // States are plain objects that are never changed in place; each has `v` (the way of playing, a key below),
-// `deal` (the deal number) and `moves`.
+// `deal` (the deal number) and `moves`. A game of Today's deal has `daily` too (the day it was dealt for), which the app
+// adds and every move carries along as it is, as it does anything else in a state it doesn't know.
 //
 //   deal(n, v)              a new game: deal number n of way v
 //   layout(s, left)         where the piles go: { cols, rows?, split?, top: [{ id, col, kind, label?, dir? }], tableau: [ids],

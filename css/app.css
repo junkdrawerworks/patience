@@ -589,6 +589,37 @@ button { font: inherit; color: inherit; }
 @media (hover: hover) {
   .choice:disabled:hover { border-color: var(--line); }
 }
+/* Today's deal: pressed, the games' buttons play today's deals. On a line of its own under New game, but beside it
+   held sideways, where there's room. */
+.new-head { flex-wrap: wrap; row-gap: 10px; }
+.today-row { order: 3; flex-basis: 100%; }
+@media (min-width: 600px) and (min-height: 560px) {
+  #sheet-new .panel { width: min(100% - 32px, 520px); }
+  #sheet-new .today-row { order: 0; flex-basis: auto; margin: 0 auto 0 18px; }
+}
+.today {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 11px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.today::before { content: ''; width: 9px; height: 9px; border: 1.5px solid currentColor; border-radius: 50%; opacity: 0.7; }
+.today::after { content: ''; position: absolute; inset: 50% 0 auto; height: 44px; translate: 0 -50%; }
+.today[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+.today[aria-pressed="true"]::before { background: currentColor; opacity: 1; }
+.today:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) {
+  .today:hover { border-color: var(--accent); }
+}
+#today-says { margin: 2px 0 14px; color: var(--muted); font-size: 13.5px; line-height: 1.4; text-wrap: balance; }
 /* By number, beside How to play, opens a field for a deal by number under them, its name and the field on one line. */
 .head-acts { display: flex; gap: 2px; }
 .head-acts .small-plain:not(:last-child) { margin-right: 0; }
@@ -639,6 +670,9 @@ button { font: inherit; color: inherit; }
   #sheet-new .pick .aside { margin: 5px 0 0; font-size: 12.5px; line-height: 1.3; }
   #sheet-new .pick .choice:has(.waits) { padding-block: 3px; }
   #sheet-new #by-number { margin: 4px 0 10px; }
+  #sheet-new .today-row { order: 0; flex-basis: auto; margin: 0 auto 0 18px; }
+  #sheet-new .today { padding-block: 5px; }
+  #sheet-new #today-says { margin: 0 0 8px; }
   #sheet-new .by-number input { min-height: 40px; padding-block: 6px; }
   .plains { display: flex; gap: 8px; margin-top: 6px; }
   .plains .plain { margin-top: 0; }
@@ -682,10 +716,12 @@ button { font: inherit; color: inherit; }
 .stats dt { font-size: 12px; color: var(--muted); }
 .stats dd { margin: 2px 0 0; font: 600 21px/1.2 var(--serif); font-variant-numeric: tabular-nums; }
 .stats + .note { margin: 10px 0 0; }
-/* The record in the menu: the counts and the streak in a row of four, and the bests in a row of three under them. */
+/* The record in the menu: the counts and the streak in a row of four, the bests in a row of three under them, and
+   Today's deal in a row of two at the foot. */
 #stats { grid-template-columns: repeat(12, 1fr); }
 #stats div { grid-column: span 3; padding-inline: 4px; }
 #stats div:nth-child(n + 5) { grid-column: span 4; }
+#stats div:nth-child(n + 8) { grid-column: span 6; }
 /* Under the record: Clear this record, which asks once, in place, before it clears. */
 .record-acts { margin-top: 8px; }
 .record-acts .small-plain { margin: 0 0 0 -10px; }

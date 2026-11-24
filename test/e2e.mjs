@@ -626,7 +626,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await p4.reload();
   await p4.waitForFunction(() => window.patience?.state, null, { timeout: 20000 });
   assert.deepEqual(await p4.evaluate(() => [window.patience.settings.auto, window.patience.settings.left, window.patience.settings.clock, window.patience.settings.look]), [true, false, true, 'phone']);
-  assert.deepEqual(await p4.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 1, best: 0, fastest: 0, fewest: 0 });
+  assert.deepEqual(await p4.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 1, best: 0, fastest: 0, fewest: 0, day: 0, dayTime: 0, days: 0 });
   assert.deepEqual(errors, [], 'errors starting from a damaged save');
   await c4.close();
 }
@@ -1834,7 +1834,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await pc.selectOption('#stats-for', 'k1');
   await pc.click('#b-clear');
   await pc.click('#b-clear-yes');
-  assert.deepEqual(await pc.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 0, best: 0, fastest: 0, fewest: 0 });
+  assert.deepEqual(await pc.evaluate(() => window.patience.stats.k1), { played: 0, won: 0, streak: 0, best: 0, fastest: 0, fewest: 0, day: 0, dayTime: 0, days: 0 });
   assert.equal(await pc.evaluate(() => document.querySelector('#stats div dd').textContent), '0', 'the tiles show it');
   assert.equal(await pc.evaluate(() => window.patience.stats.fc.won), 4, 'the FreeCell record is as it was');
   assert.equal(await pc.evaluate(() => JSON.parse(localStorage.getItem('patience.v1')).stats.k1.played), 0, 'and saved');
@@ -1913,6 +1913,101 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cn.close();
 }
 
+// Today's deal, pressed in the New game sheet, makes each game's button play today's deal of it: the same on every phone,
+// from the list made in advance, so it's dealt at once. The deal's name says so. Won, the record has its time and the
+// days in a row (one more, won yesterday too), and the won panel says so; a way of playing last won days ago has none in
+// a row. Pressed again, the button of the deal being played says Playing and leaves it be, one waiting says Carry on and
+// carries on with it, and one won says how long it took. It keeps its name after a reload and Start this deal again.
+// Pressing By number lets it go.
+{
+  const today = () => { const d = new Date(); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5); };
+  const day = today();
+  const ct = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const pt = await ct.newPage();
+  await pt.addInitScript(day => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider'], stats: {
+      k1: { played: 10, won: 6, streak: 1, best: 3, fastest: 100000, fewest: 95, day: day - 1, dayTime: 400000, days: 2 },
+      k3: { played: 8, won: 3, streak: 0, best: 2, fastest: 300000, fewest: 120, day: day - 3, dayTime: 500000, days: 5 },
+    } }));
+  }, day);
+  const ready = () => pt.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const lines = () => pt.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-v]')].map(b => [b.dataset.v, b.querySelector('.waits')?.textContent ?? ''])));
+  const now = () => pt.evaluate(() => [window.patience.state.v, window.patience.state.deal, window.patience.state.daily, document.getElementById('status').textContent]);
+  // Today's deal for each way, worked out here from the list as the README says: the first for DAILY_START, and so on.
+  const { DAILY_START, DAILY_DEALS } = await import(pathToFileURL(join(root, 'js/games/daily-deals.js')).href);
+  const todays = v => DAILY_DEALS[v][(day - Date.parse(DAILY_START + 'T00:00:00Z') / 864e5) % DAILY_DEALS[v].length];
+  await pt.goto(base);
+  await ready();
+  await pt.click('#b-new');
+  assert.equal(await pt.getAttribute('#b-today', 'aria-pressed'), 'false');
+  assert.equal(await pt.isHidden('#today-says'), true);
+  await pt.click('#b-today');
+  assert.equal(await pt.getAttribute('#b-today', 'aria-pressed'), 'true');
+  assert.match(await pt.textContent('#today-says'), /same deal on every phone today/);
+  assert.deepEqual(await lines(), { k1: 'Today’s deal', k3: 'Today’s deal', fc: 'Today’s deal', s1: 'Today’s deal', s2: 'Today’s deal', s4: 'Today’s deal' });
+  await pt.click('[data-v="fc"]');
+  await pt.waitForTimeout(1500);
+  await ready();
+  assert.deepEqual(await now(), ['fc', todays('fc'), day, 'FreeCell · Today’s deal']);
+  await pt.evaluate(({ n }) => window.patience.newGame('k1', n), { n: 11705 });
+  await pt.waitForTimeout(1500);
+  await ready();
+  await pt.click('#b-new');
+  await pt.click('#b-today');
+  assert.equal((await lines()).fc, 'Carry on');
+  await pt.click('[data-v="k1"]');
+  await pt.waitForTimeout(1800);
+  await ready();
+  assert.deepEqual(await now(), ['k1', todays('k1'), day, 'Klondike, draw one · Today’s deal']);
+  await pt.reload();
+  await ready();
+  assert.deepEqual(await now(), ['k1', todays('k1'), day, 'Klondike, draw one · Today’s deal'], 'and keep their name after a reload');
+  await pt.click('#b-new');
+  await pt.click('#b-today');
+  assert.deepEqual(await lines(), { k1: 'Playing', k3: 'Today’s deal', fc: 'Carry on', s1: 'Today’s deal', s2: 'Today’s deal', s4: 'Today’s deal' });
+  await pt.click('[data-v="k1"]');
+  assert.equal(await pt.isHidden('#sheet-new'), true, 'Playing leaves it be');
+  assert.deepEqual(await now(), ['k1', todays('k1'), day, 'Klondike, draw one · Today’s deal']);
+  await pt.evaluate(playInto, { v: 'k1', n: todays('k1'), steps: 9999, ms: 191000 });
+  await pt.waitForSelector('#won:not([hidden])', { timeout: 60000 });
+  await pt.mouse.click(30, 300);
+  await pt.waitForSelector('#won .panel:not([hidden])');
+  assert.match(await pt.textContent('#won-line'), /^Klondike, draw one, today’s\u00a0deal, in 3:\d\d and/);
+  assert.equal(await pt.textContent('#won-news'), 'Today’s deal done: 3 days in a row.');
+  const k1 = await pt.evaluate(() => window.patience.stats.k1);
+  assert.deepEqual([k1.day, k1.days], [day, 3]);
+  assert.ok(k1.dayTime >= 191000 && k1.dayTime < 240000, `today's time ${k1.dayTime}`);
+  await pt.click('#b-replay');
+  await pt.waitForTimeout(1500);
+  await ready();
+  assert.deepEqual(await now(), ['k1', todays('k1'), day, 'Klondike, draw one · Today’s deal'], 'played again, it is still today’s deal');
+  await pt.click('#b-new');
+  await pt.click('#b-today');
+  assert.equal((await lines()).k1, 'Playing');
+  await pt.click('#b-number');
+  assert.equal(await pt.getAttribute('#b-today', 'aria-pressed'), 'false', 'By number lets it go');
+  assert.equal((await lines()).k1, '');
+  await pt.click('#b-today');
+  assert.equal(await pt.isHidden('#by-number'), true, 'and it lets By number go');
+  await pt.keyboard.press('Escape');
+  await pt.evaluate(() => window.patience.newGame('k1', 5));
+  await pt.waitForTimeout(1500);
+  await ready();
+  await pt.click('#b-new');
+  await pt.click('#b-today');
+  assert.match((await lines()).k1, /^Won in 3:\d\d$/);
+  await pt.keyboard.press('Escape');
+  await pt.click('#b-menu');
+  const tile = name => pt.evaluate(name => [...document.querySelectorAll('#stats div')].find(d => d.querySelector('dt').textContent === name)?.querySelector('dd').textContent, name);
+  assert.match(await tile('Today’s deal'), /^Won in 3:\d\d$/);
+  assert.equal(await tile('Days in a row'), '3');
+  await pt.selectOption('#stats-for', 'k3');
+  assert.deepEqual([await tile('Today’s deal'), await tile('Days in a row')], ['–', '0'], 'last won three days ago');
+  await ct.close();
+}
+
 // Save a copy of your record writes a small file of the record and the settings, and Bring back a record, on another
 // phone, adds it to the record there and brings the settings back. A copy isn't brought back twice, nor onto the phone
 // it came from, and a file that isn't a record changes nothing.
@@ -1931,7 +2026,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     return [cx, px];
   };
   const [ca, a] = await open({ introduced: ['klondike', 'freecell', 'spider'], settings: { four: true, left: true, look: 'dark' }, stats: {
-    k1: { played: 30, won: 20, streak: 3, best: 6, fastest: 200000, fewest: 95 },
+    k1: { played: 30, won: 20, streak: 3, best: 6, fastest: 200000, fewest: 95, day: 20000, dayTime: 300000, days: 4 },
     s4: { played: 4, won: 1, streak: 0, best: 1, fastest: 900000, fewest: 400 },
   } });
   await a.click('#b-menu');
@@ -1945,12 +2040,12 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await a.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('That’s'));
   assert.equal(await a.evaluate(() => window.patience.stats.k1.played), 30, 'not onto the phone it came from');
 
-  const [cb, b] = await open({ introduced: ['klondike', 'freecell', 'spider'], stats: { k1: { played: 5, won: 2, streak: 5, best: 5, fastest: 150000, fewest: 0 } } });
+  const [cb, b] = await open({ introduced: ['klondike', 'freecell', 'spider'], stats: { k1: { played: 5, won: 2, streak: 5, best: 5, fastest: 150000, fewest: 0, day: 19990, dayTime: 100000, days: 9 } } });
   await b.click('#b-menu');
   await b.setInputFiles('#f-bring', path);
   await b.waitForFunction(() => document.getElementById('keep-says').textContent.startsWith('Your record'));
   assert.match(await b.textContent('#keep-says'), /^Your record from \d+ \w+ \d{4} is added to this one, and its settings are back\.$/);
-  assert.deepEqual(await b.evaluate(() => window.patience.stats.k1), { played: 35, won: 22, streak: 5, best: 6, fastest: 150000, fewest: 95 }, 'added together');
+  assert.deepEqual(await b.evaluate(() => window.patience.stats.k1), { played: 35, won: 22, streak: 5, best: 6, fastest: 150000, fewest: 95, day: 20000, dayTime: 300000, days: 4 }, 'added together, with the later Today\'s deal');
   assert.deepEqual(await b.evaluate(() => window.patience.stats.s4), copy.stats.s4);
   assert.equal(await b.evaluate(() => document.querySelector('#stats div dd').textContent), '35', 'the tiles show it');
   assert.deepEqual(await b.evaluate(() => [window.patience.settings.four, window.patience.settings.left, document.documentElement.dataset.theme]), [true, true, 'dark'], 'the settings came back');
@@ -2803,8 +2898,8 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
 
 // The New game sheet tells a newcomer how each game is won and built: FreeCell's foundations and alternating colours,
 // and Spider's any suit, with only a run of one suit moving. Part way through a game, it still doesn't scroll held
-// sideways, and on a 360 by 740 phone it's no taller than it was (715 px) and the two lines under Four suits (760). Those
-// lines point four-suit players to Four-colour suits.
+// sideways, and on a 360 by 740 phone it's no taller than it was (715 px), the two lines under Four suits and Today's
+// deal's row (805). Those lines point four-suit players to Four-colour suits.
 {
   const cn = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   const pn = await cn.newPage();
@@ -2823,7 +2918,7 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
     await pn.waitForTimeout(400);
     const fit = await pn.$eval('#sheet-new .panel', p => [p.scrollHeight, p.clientHeight]);
     if (width > height) assert.ok(fit[0] <= fit[1], `the New game sheet scrolls at ${width} by ${height}: ${fit}`);
-    else assert.ok(fit[0] <= 760, `the New game sheet at ${width} by ${height} is ${fit[0]} px tall, more than it was`);
+    else assert.ok(fit[0] <= 805, `the New game sheet at ${width} by ${height} is ${fit[0]} px tall, more than it was`);
     await pn.keyboard.press('Escape');
   }
   await cn.close();

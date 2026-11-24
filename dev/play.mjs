@@ -4,7 +4,9 @@
 export async function playInto({ v, n, steps, ms = 0 }) {
   const { VARIANTS } = await import('./js/games/index.js');
   const game = VARIANTS[v].game;
-  let s = game.deal(n, v);
+  // From the table, if it's that deal as dealt, so it stays the game it is (Today's deal, say).
+  const now = window.patience.state;
+  let s = now?.v === v && now.deal === n && !now.moves ? now : game.deal(n, v);
   const search = game.search(s);
   while (!search.result && search.nodes < 400000) search.step(5000);
   if (search.result !== 'won') throw new Error(`${v} deal ${n} did not solve`);
