@@ -56,7 +56,7 @@ node dev/freecell-check.mjs 100   # the same for FreeCell, checking every move b
 node dev/spider-check.mjs s2 30   # the same for Spider with two suits (s1, s2 or s4)
 node dev/pyramid-check.mjs 100    # the same for Pyramid
 node dev/ready-deals.mjs k3 50    # rewrites the list of deals checked in advance for one way of playing (--check checks them all)
-node dev/daily-deals.mjs all 366  # makes the lists for Today's deal 366 days long, keeping the days already there (--check checks them all)
+node dev/daily-deals.mjs all 1096 # adds a third year to the lists for Today's deal, keeping the days already there (--check checks them all)
 node dev/hint-check.mjs k3 50     # plays 50 deals doing just what Hint says, and lists any it doesn't win (with `on daily` after it, Today's deals)
 ```
 
@@ -64,7 +64,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 
 ### Files
 
-- `js/games/`: the rules of each game, all with the same parts so the rest of the app doesn't need to know which is being played (`index.js` lists them and what each part does). `ready-deals.js` is the list of deals checked in advance for each way of playing, so the first game of each needn't wait, and `daily-deals.js` the deals for Today's deal, a year of them for each way of playing, every one won by the solver, starting on 23 November 2026 and coming round again after that.
+- `js/games/`: the rules of each game, all with the same parts so the rest of the app doesn't need to know which is being played (`index.js` lists them and what each part does). `ready-deals.js` is the list of deals checked in advance for each way of playing, so the first game of each needn't wait, and `daily-deals.js` the deals for Today's deal, two years of them for each way of playing, every one won by the solver, starting on 23 November 2026 and coming round again after that.
 - `js/solvers/klondike.js`: the Klondike solver. A depth-first search that sees the face-down cards, offers every card the stock can reach as a move of its own, and never looks at the same position twice. Drawing three, it allows for a card going up by itself from the waste, which changes what later draws turn over, so a deal it hands out can be won with that setting on or off. To be quick it leaves out moves that seldom help, like moving part of a run or taking a card back down, so before Hint says a game can't be won, or the game says there are no moves left, it looks again with every move. In the 100,000 positions it gets to check a deal before it reaches you, it wins about 79% of deals drawing one and 68% drawing three.
 - `js/solvers/best-first.js`: a best-first search shared by the FreeCell and Spider solvers, which always looks next at the most promising position found so far. Spider's keeps each position it has still to look at as a short line of characters and builds the table again when it gets to it, so even a four-suit search that runs to its limit takes tens of megabytes, not hundreds.
 - `js/solvers/freecell.js`: the FreeCell solver. In the 100,000 positions it gets to check a deal before it reaches you, it wins 98 of the first 100 Windows deals in about a tenth of a second each (99 in the 200,000 Hint gets), and proves game 11982, the famous one, can't be won.
