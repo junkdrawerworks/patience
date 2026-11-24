@@ -51,7 +51,9 @@
 //   outOfMoves(s, { auto }) deadEnd run to its limit at once: true only if it's sure nothing can help
 //   bounceOrder(s)          the cards in the order they bounce off the table when it's won
 //   dealOrder(s)            the cards in the order they're dealt, for the dealing animation
-//   randomDeal()            a deal number
+//   randomDeal()            a deal number, from 1 to lastDeal
+//   lastDeal                the highest deal number, for a deal asked for by its number too: 32,000 for FreeCell and
+//                           999,999 for the others
 //   budget                  how many positions the solver may look at: { deal, hint }, { all } for searchAll, and
 //                           { dead } for deadEnd; Spider adds { idle }, as far as a look that ran out at `dead` carries on
 //                           while the table is left as it is

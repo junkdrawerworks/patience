@@ -1845,6 +1845,74 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cc.close();
 }
 
+// A deal by number, under By number in the New game sheet: a number typed (as the game shows it, with its comma) puts
+// that deal under every game's name, or how high the game's deals go if it hasn't one so high, and a game's button then
+// plays it, as asked, even with "Only deal games that can be won" on. Enter plays it in the game the sheet opened on.
+// With the field empty again, or put away, a game waiting says Carry on, as it did.
+{
+  const cn = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  const pn = await cn.newPage();
+  const ready = () => pn.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const lines = () => pn.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-v]')].map(b => [b.dataset.v, (b.disabled ? 'off: ' : '') + (b.querySelector('.waits')?.textContent ?? '')])));
+  const now = () => pn.evaluate(() => [window.patience.state.v, window.patience.state.deal, window.patience.state.moves]);
+  await pn.goto(base);
+  await ready();
+  assert.equal(await pn.evaluate(() => window.patience.settings.winnable), true);
+  await pn.evaluate(() => window.patience.newGame('fc', 617));
+  await pn.waitForTimeout(1500);
+  await ready();
+  await pn.click('#b-hint');
+  await pn.waitForSelector('.hint', { timeout: 15000 });
+  await pn.keyboard.press('Enter');
+  await ready();
+  await pn.evaluate(() => window.patience.newGame('k1', 11705));
+  await pn.waitForTimeout(1500);
+  await ready();
+  await pn.click('#b-new');
+  assert.equal((await lines()).fc, 'Carry on');
+  assert.equal(await pn.isHidden('#by-number'), true, 'the field waits under By number');
+  await pn.click('#b-number');
+  assert.equal(await pn.evaluate(() => document.activeElement.id), 'deal-n');
+  assert.equal(await pn.isHidden('#deal-n-says'), true);
+  await pn.fill('#deal-n', '52,817');
+  assert.deepEqual(await lines(), { k1: 'Deal 52,817', k3: 'Deal 52,817', fc: 'off: Up to 32,000', s1: 'Deal 52,817', s2: 'Deal 52,817', s4: 'Deal 52,817' });
+  assert.match(await pn.textContent('#deal-n-says'), /isn’t checked first.*11,982/);
+  await pn.fill('#deal-n', '1000000');
+  assert.ok(Object.values(await lines()).every(l => l.startsWith('off: Up to')), 'no game has a deal so high');
+  await pn.fill('#deal-n', '617');
+  await pn.click('[data-v="s2"]');
+  await pn.waitForTimeout(1800);
+  await ready();
+  assert.deepEqual(await now(), ['s2', 617, 0], 'two-suit Spider, deal 617');
+  await pn.click('#b-new');
+  assert.equal(await pn.isHidden('#by-number'), true, 'and is put away again');
+  await pn.click('#b-number');
+  assert.equal(await pn.inputValue('#deal-n'), '', 'the field starts empty each time');
+  assert.equal((await lines()).fc, 'Carry on');
+  await pn.fill('#deal-n', '617');
+  await pn.click('[data-v="fc"]');
+  await pn.waitForTimeout(1800);
+  await ready();
+  assert.deepEqual(await now(), ['fc', 617, 0], 'FreeCell 617 from the start, not the game that was waiting');
+  await pn.click('#b-new');
+  await pn.click('#b-number');
+  await pn.fill('#deal-n', '11982');
+  await pn.press('#deal-n', 'Enter');
+  await pn.waitForTimeout(1800);
+  await ready();
+  assert.deepEqual(await now(), ['fc', 11982, 0], 'Enter plays it in the game the sheet opened on, winnable or not');
+  await pn.click('#b-new');
+  await pn.click('#b-number');
+  await pn.fill('#deal-n', '5');
+  await pn.fill('#deal-n', '');
+  assert.deepEqual(await lines(), { k1: 'Carry on', k3: '', fc: '', s1: '', s2: 'Carry on', s4: '' });
+  await pn.fill('#deal-n', '5');
+  await pn.click('#b-number');
+  assert.equal(await pn.isHidden('#by-number'), true, 'By number puts it away');
+  assert.deepEqual(await lines(), { k1: 'Carry on', k3: '', fc: '', s1: '', s2: 'Carry on', s4: '' }, 'with the number it had');
+  await cn.close();
+}
+
 // Save a copy of your record writes a small file of the record and the settings, and Bring back a record, on another
 // phone, adds it to the record there and brings the settings back. A copy isn't brought back twice, nor onto the phone
 // it came from, and a file that isn't a record changes nothing.

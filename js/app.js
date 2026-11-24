@@ -886,21 +886,19 @@ function askNoMore(focus) {
   $('b-clear').hidden = false;
   if (focus) $('b-clear').focus({ preventScroll: true });
 }
-document.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => newGame(b.dataset.v)));
+document.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => {
+  const n = askedFor();
+  if (n) newGame(b.dataset.v, n); else newGame(b.dataset.v);
+}));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
 
 function openNew() {
   hideToast();
   $('new-note').hidden = !inPlay();
-  // The other ways of playing with a game waiting say so: choosing one carries on with it.
-  document.querySelectorAll('[data-v]').forEach(b => {
-    b.querySelector('.waits')?.remove();
-    if (!waiting[b.dataset.v] || b.dataset.v === game?.v) return;
-    const line = document.createElement('span');
-    line.className = 'waits';
-    line.textContent = 'Carry on';
-    b.append(line);
-  });
+  $('deal-n').value = '';
+  $('by-number').hidden = true;
+  $('b-number').setAttribute('aria-expanded', 'false');
+  showChoices();
   $('b-restart').hidden = !game || !game.moves;
   $('b-keep').textContent = game && over() ? 'Close' : 'Keep playing'; // a game won is over, so there's no playing on
   document.querySelectorAll('[data-v]').forEach(b => {
@@ -910,6 +908,48 @@ function openNew() {
   });
   openSheet('sheet-new');
 }
+
+// A deal by number, in the New game sheet (under By number): the number typed (only its digits, so 52,817 as the game shows it will do),
+// or 0 for none. With one, each game's button plays that deal of it, as long as the game has a deal of that number,
+// and the deal is played as asked, without the check that it can be won.
+const askedFor = () => Number($('deal-n').value.replace(/\D/g, '').slice(0, 9)) || 0;
+const fmt = n => n.toLocaleString('en-US');
+// Under each game's name in the sheet: the deal a number typed would play (or how high its deals go, if it hasn't
+// one so high), or else Carry on, for another way of playing with a game waiting.
+function showChoices() {
+  const n = askedFor();
+  document.querySelectorAll('[data-v]').forEach(b => {
+    const v = b.dataset.v, last = VARIANTS[v].game.lastDeal;
+    b.querySelector('.waits')?.remove();
+    b.disabled = n > last;
+    const words = n ? (n > last ? `Up to ${fmt(last)}` : `Deal ${fmt(n)}`) : waiting[v] && v !== game?.v ? 'Carry on' : '';
+    if (!words) return;
+    const line = document.createElement('span');
+    line.className = 'waits';
+    line.textContent = words;
+    b.append(line);
+  });
+  const says = $('deal-n-says');
+  says.hidden = !n;
+  says.textContent = !n ? '' : n > 999999 ? 'Deals go up to 999,999, and FreeCell’s to 32,000.'
+    : `Choose a game for deal ${fmt(n)}. A deal by number isn’t checked first, so it may be one that can’t be won, as FreeCell’s 11,982 famously can’t.`;
+}
+$('deal-n').addEventListener('input', showChoices);
+// By number opens the field, and closes it again, leaving the games as they were.
+$('b-number').addEventListener('click', () => {
+  const open = $('by-number').hidden;
+  $('by-number').hidden = !open;
+  $('b-number').setAttribute('aria-expanded', String(open));
+  if (open) $('deal-n').focus();
+  else { $('deal-n').value = ''; showChoices(); }
+});
+// Enter (Go on a phone's keyboard) plays the deal in the way of playing the sheet opened on.
+$('deal-n').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  const n = askedFor(), v = game?.v || settings.variant;
+  if (n && n <= VARIANTS[v].game.lastDeal) newGame(v, n);
+});
 
 let opener = null;
 function openSheet(id) {

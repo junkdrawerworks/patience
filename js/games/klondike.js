@@ -306,6 +306,7 @@ export const klondike = {
     return out;
   },
 
+  lastDeal: 999999,
   randomDeal: () => 1 + Math.floor(Math.random() * 999999),
   budget: { deal: 100000, hint: 300000, all: 50000, dead: 3000 },
 };

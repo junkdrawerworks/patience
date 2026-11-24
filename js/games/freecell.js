@@ -201,6 +201,7 @@ export const freecell = {
   },
 
   // The deals numbered 1 to 32,000, as Windows numbered them.
+  lastDeal: 32000,
   randomDeal: () => 1 + Math.floor(Math.random() * 32000),
   budget: { deal: 100000, hint: 200000, dead: 1000 },
 };

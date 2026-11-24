@@ -51,7 +51,17 @@
     <section class="panel" role="dialog" aria-modal="true" aria-labelledby="new-title">
       <div class="panel-head new-head">
         <h2 id="new-title">New game</h2>
-        <button type="button" class="small-plain" id="b-howto">How to play</button>
+        <div class="head-acts">
+          <button type="button" class="small-plain" id="b-number" aria-expanded="false" aria-controls="by-number">By number</button>
+          <button type="button" class="small-plain" id="b-howto">How to play</button>
+        </div>
+      </div>
+      <div id="by-number" hidden>
+        <div class="by-number">
+          <label for="deal-n">Deal number</label>
+          <input type="text" id="deal-n" inputmode="numeric" autocomplete="off" enterkeyhint="go" spellcheck="false" aria-describedby="deal-n-says">
+        </div>
+        <p id="deal-n-says" hidden></p>
       </div>
       <p class="note" id="new-note" hidden>A new deal of this game counts the one you're in as a loss. Starting this deal again doesn't.</p>
       <div class="games">
