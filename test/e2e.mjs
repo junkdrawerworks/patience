@@ -889,6 +889,22 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.deepEqual(await cursor(), { pile: 't2', index: 5, held: null }, 'and the ring stayed on the column, now on its top card');
   await key('z');
   await ready();
+  // Home jumps from part way up a column straight to the top row, and End back down to the column's top card.
+  await key('3');
+  await key('ArrowUp');
+  await key('ArrowUp');
+  assert.deepEqual(await cursor(), { pile: 't2', index: 4, held: null }, 'two up the third column');
+  await key('Home');
+  assert.equal((await cursor()).pile, 'c2', 'Home went straight up to the free cell above');
+  await key('Home');
+  assert.equal((await cursor()).pile, 'c2', 'and, in the top row already, stayed there');
+  await key('End');
+  assert.deepEqual(await cursor(), { pile: 't2', index: 6, held: null }, 'End came back down to the column’s top card');
+  await key('ArrowUp');
+  await key('ArrowUp');
+  await key('End');
+  assert.deepEqual(await cursor(), { pile: 't2', index: 6, held: null }, 'and from part way up a column, to its top card');
+  assert.equal((await now()).moves, 0, 'neither key moves a card');
 
   // The whole game, by keys alone: for each of the solver's moves, the keys to choose the card, Space, the keys to
   // choose where it goes, and Space. (No index: the pile's top card.)
@@ -3273,6 +3289,15 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   assert.equal(await pp.getAttribute('#pile-stock', 'aria-label'), 'Deck empty, tap to turn the pile over, twice more');
   // By keyboard: the first arrow shows the ring on the queen; down to the 6 under her, Enter picks it, left to the 7 past
   // the ace, and Enter takes the pair.
+  // (Home jumps to the top row, and End to the nearest card in the pyramid's lowest row that has one. Escape takes
+  // the ring away again.)
+  await pp.keyboard.press('Home');
+  assert.match(await pp.evaluate(() => window.patience.cursor.pile), /^(stock|drawn|waste|out)$/, 'the top row');
+  await pp.keyboard.press('End');
+  assert.match(await pp.evaluate(() => window.patience.cursor.pile), /^p2[1-7]$/, 'the bottom row');
+  await pp.keyboard.press('Escape');
+  await pp.keyboard.press('Escape');
+  assert.equal(await pp.evaluate(() => window.patience.cursor), null);
   await pp.keyboard.press('ArrowUp');
   assert.equal((await pp.evaluate(() => window.patience.cursor)).pile, 'p20');
   await pp.keyboard.press('ArrowDown');

@@ -1140,7 +1140,8 @@ document.addEventListener('keydown', e => {
   }
   if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } // held down, it keeps stepping back
   else if (e.ctrlKey || e.metaKey) return;
-  // The arrow keys choose a place on the table, and 1 to 9 and 0 a column (held down, an arrow keeps going).
+  // The arrow keys choose a place on the table, Home the top row and End the column below, and 1 to 9 and 0 a column
+  // (held down, an arrow keeps going).
   else if (ARROWS[k]) { e.preventDefault(); focusTable(); table.steer(ARROWS[k]); }
   else if (/^[0-9]$/.test(k) && !e.repeat) { focusTable(); table.toColumn(+k || 10); }
   else if (e.repeat) { if (k === ' ' || k === 'enter') e.preventDefault(); } // the others, held down, do it once
@@ -1158,7 +1159,7 @@ document.addEventListener('keydown', e => {
 // Whether the keyboard brought focus to where it is (Tab, or Escape closing a sheet). A button there takes Space and
 // Enter; a button that kept focus after a click or tap leaves Space to the deck, and Enter to the move Hint is showing.
 let byKey = false, keyFocus = false;
-const ARROWS = { arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down' };
+const ARROWS = { arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down', home: 'home', end: 'end' };
 // A finger or the mouse, anywhere, takes the ring away too, and puts back any cards the keyboard is holding.
 document.addEventListener('pointerdown', () => { byKey = false; table.el.classList.remove('keyed'); table.hideCursor(); }, true);
 document.addEventListener('keydown', () => { byKey = true; }, true);

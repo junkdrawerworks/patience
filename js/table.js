@@ -676,10 +676,13 @@ export class Table {
   }
 
   // An arrow key: along the row, or up and down a column's face-up cards and between the columns and the top row. The
-  // first press shows where it is (Hint's card, if one is lit, or else the first column).
+  // first press shows where it is (Hint's card, if one is lit, or else the first column). Home and End ('home', 'end')
+  // jump: Home straight up to the top row, End back down to the top card of the column below (in Pyramid, to the
+  // nearest card in the lowest row that has one).
   steer(dir) {
     if (!this.state || !this.m) return;
     const c = this.cursor;
+    if (dir === 'home' || dir === 'end') { this.jump(dir); return; }
     if (!c) {
       const h = this.shown;
       if (h) this.pointAtHint(h); else if (this.lower.length) this.point(this.lower[0]); else this.point(this.topRow[0]);
@@ -697,6 +700,18 @@ export class Table {
       else if (isCol && this.topRow.length) this.point(nearest(this.topRow));
     } else if (!isCol) this.point(nearest(this.columns));
     else if (!this.held && c.index < this.topOf(c.pile)) this.point(c.pile, c.index + 1);
+  }
+
+  jump(dir) {
+    const c = this.cursor, m = this.m, top = this.topRow, cols = this.columns;
+    const near = ids => (c ? ids.reduce((a, b) => (Math.abs(this.xOf(b) - this.xOf(c.pile)) < Math.abs(this.xOf(a) - this.xOf(c.pile)) ? b : a)) : ids[0]);
+    if (dir === 'home') {
+      if (top.length && !(c && top.includes(c.pile))) this.point(near(top));
+    } else if (cols.length) this.point(c && m.kind[c.pile] === 'column' ? c.pile : near(cols));
+    else if (this.lower.length) {
+      const low = Math.max(...this.lower.map(id => m.row[id]));
+      this.point(near(this.lower.filter(id => m.row[id] === low)));
+    }
   }
 
   // The arrow keys among places with a card each (Pyramid's): along a row, or to the nearest card in the next row up or
