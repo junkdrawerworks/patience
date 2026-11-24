@@ -9,9 +9,10 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const RECYCLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg>';
 
 export class Table {
-  // handlers: stock(), tap(pile, n), move(pile, n, to) (a drop, or a tap on the card Hint lit up), touched(deck), and
+  // handlers: stock(), tap(pile, n), move(pile, n, to) (a drop, or a tap on the card Hint lit up), touched(deck),
   // refused(why): a drag the rules turned down, { from, cards, to } for cards let go where they can't go, or
-  // { from, index } for a card that couldn't be picked up, dragged anyway (a tap on it only shakes it)
+  // { from, index } for a card that couldn't be picked up, dragged anyway (a tap on it only shakes it), and
+  // held(cards): cards picked up with the keyboard, or put back (none)
   constructor(el, handlers) {
     this.el = el;
     this.on = handlers;
@@ -23,6 +24,8 @@ export class Table {
     this.at = new Map();    // card -> where it's drawn: { x, y, z, up, pile, index, deep }
     this.flights = new Map(); // card -> its landing, while it's on its way: { timer, z, deep } (see fly())
     this.drag = null;
+    this.cursor = null; // the place the keyboard has chosen, and the cards it holds (see the keyboard, below)
+    this.held = null;
     this.dealDuration = 0;
     // With reduced motion asked for, cards go straight to where they're going: no dealing out, no waiting their turn.
     this.calm = matchMedia('(prefers-reduced-motion: reduce)');
@@ -107,6 +110,7 @@ export class Table {
       if (!el) {
         el = document.createElement('div');
         el.className = 'spot';
+        el.id = 'pile-' + p.id;
         el.dataset.pile = p.id;
         this.spots[p.id] = el;
       }
@@ -322,7 +326,10 @@ export class Table {
     }
     this.at = at;
     this.name(s);
-    if (holding) this.aim();
+    // Cards held with the keyboard are put back if they aren't on top of their pile any more (Undo took them back).
+    if (this.held && !this.holds(this.held, s)) this.putBack();
+    this.showCursor();
+    if (holding || this.held) this.aim();
     for (const id of m.piles) {
       if (m.kind[id] !== 'stock') continue;
       const pile = this.game.pile(s, id), waste = this.game.pile(s, 'waste');
@@ -412,6 +419,7 @@ export class Table {
   // ---- picking cards up ----
 
   down(e) {
+    this.hideCursor(); // a finger or the mouse takes over from the keyboard
     if (this.locked || this.drag || !this.state || (e.pointerType === 'mouse' && e.button !== 0)) return;
     this.balked = null;
     const s = this.state, m = this.m;
@@ -479,9 +487,11 @@ export class Table {
     this.aiming ||= requestAnimationFrame(() => { this.aiming = 0; this.aim(); });
   }
 
-  // Outline where the cards held would go if let go now: the top card of that pile, or its empty place.
+  // Outline where the cards held would go if let go now: the top card of that pile, or its empty place. Held with the
+  // keyboard, that's the place it has chosen, if they can go there.
   aim() {
-    const d = this.drag, to = d?.moved && this.dropTarget(d);
+    const d = this.drag, k = this.held, at = this.cursor?.pile;
+    const to = d?.moved ? this.dropTarget(d) : k && at !== k.pile && this.fits(k.cards, at) ? at : null;
     let el = null;
     if (to) {
       const { down, up } = this.game.pile(this.state, to), top = up.length ? up[up.length - 1] : down[down.length - 1];
@@ -582,6 +592,181 @@ export class Table {
     return { x: m.spot[id] - g, y: m.tabY - g, w: m.cw + 2 * g, h: bottom - m.tabY + m.ch * 0.4 + g };
   }
 
+  // ---- the keyboard ----
+
+  // The arrow keys choose a place on the table, shown with a ring: `cursor` is { pile, index }, index being which of the
+  // pile's face-up cards (in a column, any of them; elsewhere, the top one), or -1 for none. Enter does what a tap there
+  // would; Space picks the cards up from there (`held`, like a drag: { pile, n, cards }), and again puts them down where
+  // the arrows have taken them, outlined while they can go there.
+
+  // The top row as the arrow keys go along it, from the left: Spider's cleared runs are left out, being for looking at.
+  get topRow() {
+    const m = this.m;
+    return m.piles.filter(id => m.kind[id] !== 'column' && m.kind[id] !== 'sets').sort((a, b) => this.xOf(a) - this.xOf(b));
+  }
+  get columns() { return this.m.piles.filter(id => this.m.kind[id] === 'column'); }
+
+  // Where a pile is across the table: its top card, which in a fanned waste is further right than the pile's place.
+  xOf(id) {
+    const up = this.game.pile(this.state, id).up, top = up[up.length - 1];
+    return top !== undefined && this.at.get(top) ? this.at.get(top).x : this.m.spot[id];
+  }
+
+  // The pile's top card's index, or -1.
+  topOf(id) { return this.game.pile(this.state, id).up.length - 1; }
+
+  // Choose a place, and show it.
+  point(pile, index = this.topOf(pile)) {
+    this.cursor = { pile, index };
+    this.showCursor();
+    this.aim();
+  }
+
+  // An arrow key: along the row, or up and down a column's face-up cards and between the columns and the top row. The
+  // first press shows where it is (Hint's card, if one is lit, or else the first column).
+  steer(dir) {
+    if (!this.state || !this.m) return;
+    const c = this.cursor;
+    if (!c) {
+      const h = this.shown;
+      if (h) this.pointAtHint(h); else this.point(this.columns[0]);
+      return;
+    }
+    const isCol = this.m.kind[c.pile] === 'column', row = isCol ? this.columns : this.topRow;
+    const nearest = ids => ids.reduce((a, b) => (Math.abs(this.xOf(b) - this.xOf(c.pile)) < Math.abs(this.xOf(a) - this.xOf(c.pile)) ? b : a));
+    if (dir === 'left' || dir === 'right') {
+      const next = row[row.indexOf(c.pile) + (dir === 'left' ? -1 : 1)];
+      if (next) this.point(next);
+    } else if (dir === 'up') {
+      // Holding cards, it's only where they go that matters, so it goes straight between the rows.
+      if (isCol && !this.held && c.index > 0) this.point(c.pile, c.index - 1);
+      else if (isCol && this.topRow.length) this.point(nearest(this.topRow));
+    } else if (!isCol) this.point(nearest(this.columns));
+    else if (!this.held && c.index < this.topOf(c.pile)) this.point(c.pile, c.index + 1);
+  }
+
+  // 1 to 9, and 0 for the tenth: that column's top card.
+  toColumn(n) {
+    const id = this.state && this.m && this.columns[n - 1];
+    if (id) this.point(id);
+  }
+
+  // Hint's card (or the deck), when the cursor is showing, so Enter plays its move as a tap on that card would.
+  pointAtHint(h) {
+    if (h.stock) this.point(this.m.piles.find(p => this.m.kind[p] === 'stock' || this.m.kind[p] === 'deals'));
+    else this.point(h.from, this.topOf(h.from) + 1 - h.n);
+  }
+
+  // Enter: what a tap on the chosen card would do (a tap on either card Hint lit up plays its move), or, holding cards,
+  // put them down.
+  press() {
+    const c = this.cursor;
+    if (!c || this.locked) return;
+    if (this.held) { this.putDown(); return; }
+    const kind = this.m.kind[c.pile], s = this.state, h = this.shown && !this.shown.stock ? this.shown : null;
+    if (kind === 'stock' || kind === 'deals') { this.on.stock(); return; }
+    if (kind === 'sets') return;
+    const top = this.topOf(c.pile), hintedTo = h && c.pile === h.to && c.index === top;
+    if (c.index < 0) { if (hintedTo) this.on.move(h.from, h.n, h.to); return; }
+    const cards = this.game.lift(s, c.pile, c.index);
+    if (!cards) {
+      if (hintedTo) this.on.move(h.from, h.n, h.to);
+      else this.shakeCards([this.game.pile(s, c.pile).up[c.index]]);
+      return;
+    }
+    if (h && c.pile === h.from && cards.length === h.n) this.on.move(c.pile, cards.length, h.to);
+    else if (hintedTo && cards.length === 1) this.on.move(h.from, h.n, h.to);
+    else this.on.tap(c.pile, cards.length);
+  }
+
+  // Space: pick up the cards from the chosen card (the deck: draw, or deal a row), or put down the cards held.
+  pickUp() {
+    const c = this.cursor;
+    if (!c || this.locked) return;
+    if (this.held) { this.putDown(); return; }
+    const kind = this.m.kind[c.pile], s = this.state;
+    if (kind === 'stock' || kind === 'deals') { this.on.stock(); return; }
+    if (kind === 'sets' || c.index < 0) return;
+    const cards = this.game.lift(s, c.pile, c.index);
+    if (!cards) {
+      this.shakeCards([this.game.pile(s, c.pile).up[c.index]]);
+      this.on.refused?.({ from: c.pile, index: c.index });
+      return;
+    }
+    this.held = { pile: c.pile, n: cards.length, cards };
+    cards.forEach(x => this.cards.get(x).classList.add('held'));
+    this.on.held?.(cards);
+    this.aim();
+  }
+
+  // Put the cards held down where the cursor is: back where they came from, or where they can go. Where they can't, they
+  // shake and stay held, and the game may say why.
+  putDown() {
+    const k = this.held, to = this.cursor.pile;
+    if (to === k.pile) { this.putBack(true); return; }
+    if (!this.fits(k.cards, to)) {
+      this.shakeCards(k.cards);
+      this.on.refused?.({ from: k.pile, cards: k.cards, to });
+      return;
+    }
+    this.putBack();
+    this.on.move(k.pile, k.n, to);
+  }
+
+  // Let go of the cards held with the keyboard, leaving them where they are. (`said`: say so.)
+  putBack(said) {
+    const k = this.held;
+    if (!k) return;
+    this.held = null;
+    k.cards.forEach(x => this.cards.get(x)?.classList.remove('held'));
+    this.aim();
+    if (said) this.on.held?.([]);
+  }
+
+  fits(cards, to) { return !!to && this.game.targets(this.state).includes(to) && this.game.canDrop(this.state, cards, to); }
+
+  // Take the ring away (a tap or a click, Escape, or a new game), putting back anything held.
+  hideCursor() {
+    if (!this.cursor && !this.held) return;
+    this.putBack();
+    this.cursor = null;
+    this.showCursor();
+  }
+
+  // Draw the ring where the cursor is, keeping it on the pile when the cards change: on the same card if it's still
+  // there, otherwise the top one. It's a frame of its own over the cards, round as much of the card as shows (a card
+  // under others in a column, its strip), so nothing covers it. To a screen reader, it's the card or the pile it's on
+  // (aria-activedescendant).
+  showCursor() {
+    const c = this.cursor, m = this.m;
+    let box = null, named = null;
+    if (c && !(m && c.pile in m.kind)) this.cursor = null;
+    else if (c) {
+      const { down, up } = this.game.pile(this.state, c.pile), col = m.kind[c.pile] === 'column';
+      c.index = col ? clamp(c.index, up.length ? 0 : -1, up.length - 1) : up.length - 1;
+      const card = c.index >= 0 ? up[c.index] : down[down.length - 1];
+      const p = card !== undefined && this.at.get(card);
+      if (p) {
+        const next = col && c.index >= 0 && this.at.get(up[c.index + 1]);
+        // (A covered card's ring stops where the next card starts, clear of that card's rank.)
+        box = { x: p.x, y: p.y, h: next ? next.y - p.y - 4 : m.ch };
+      } else box = { x: m.spot[c.pile], y: col ? m.tabY : m.top, h: m.ch };
+      if (c.index >= 0) named = this.cards.get(up[c.index]);
+      if (!named || named.getAttribute('aria-hidden')) named = this.spots[c.pile];
+    }
+    if (box && !this.ring) {
+      this.ring = document.createElement('div');
+      this.ring.className = 'ring';
+      this.ring.setAttribute('aria-hidden', 'true');
+    }
+    if (box) {
+      if (this.ring.parentNode !== this.el) this.el.append(this.ring);
+      this.ring.style.transform = `translate(${Math.round(box.x)}px, ${Math.round(box.y)}px)`;
+      this.ring.style.height = `${Math.round(box.h) + 8}px`; // 4 px outside it, above and below
+    } else this.ring?.remove();
+    attr(this.el, 'aria-activedescendant', named ? named.id : null);
+  }
+
   // ---- showing things ----
 
   shake(pile, n) { this.shakeCards(this.game.pile(this.state, pile).up.slice(-n)); }
@@ -615,6 +800,7 @@ export class Table {
     }
     marks.forEach(el => el.classList.add('hint'));
     this.hinted = marks;
+    if (this.cursor && !this.held) this.pointAtHint(h);
   }
 
   // Light up these piles' empty places for a couple of seconds, beside a message about them.

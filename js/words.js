@@ -60,6 +60,9 @@ export function upWords(cards) {
   return `Up by themselves: ${list(runs.map(r => `the ${list(r.ranks)} of ${SUIT_NAMES[r.suit]}`))}.`;
 }
 
+// Cards picked up with the keyboard, or put back (none): "Holding the 7 of hearts and 2 more."
+export const heldWords = cards => (cards.length ? `Holding the ${what(cards)}.` : 'Put back.');
+
 // Hint's move `h` in table s: "Hint: the queen of hearts onto the king of clubs."
 export function hintWords(g, s, h) {
   if (h.stock) return !Array.isArray(s.waste) ? 'Hint: deal a row.' : s.stock.length ? 'Hint: draw a card.' : 'Hint: turn the pile back over.';

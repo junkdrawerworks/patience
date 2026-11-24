@@ -810,6 +810,182 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await c6.close();
 }
 
+// Every move by keyboard alone. The arrow keys choose a card, with a ring round it, and 1 to 9 and 0 a column; Enter
+// does what a tap there would; Space picks the cards up, outlining where they can go, and puts them down; Escape puts
+// them back. A whole FreeCell game is won that way, and Klondike's deck and Hint's move work from the ring too.
+{
+  const c7 = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+  const p7 = await c7.newPage();
+  const errors = [];
+  p7.on('pageerror', e => errors.push(e.message));
+  const ready = () => p7.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const now = () => p7.evaluate(() => window.patience.state);
+  const cursor = () => p7.evaluate(() => window.patience.cursor);
+  const key = k => p7.keyboard.press(k);
+  const ring = () => p7.evaluate(() => {
+    const r = document.querySelector('#table .ring');
+    if (!r) return null;
+    const b = r.getBoundingClientRect(), cs = getComputedStyle(r);
+    return { x: b.x, y: b.y, w: b.width, h: b.height, border: cs.borderTopColor, active: document.getElementById('table').getAttribute('aria-activedescendant') };
+  });
+  const box = sel => p7.evaluate(s => { const b = document.querySelector(s).getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; }, sel);
+  await p7.goto(base);
+  await ready();
+  await p7.evaluate(() => window.patience.newGame('fc', 617));
+  await p7.waitForTimeout(1500);
+  await ready();
+  // Game 617's third column, from the top: 5♣ Q♦ 3♥ 9♠ 9♣ 2♥ K♣ (cards 30, 50, 15, 8, 34, 14, 38).
+  let s = await now();
+  assert.deepEqual(s.tab[2], [30, 50, 15, 8, 34, 14, 38]);
+  assert.equal(await ring(), null, 'no ring until a key asks for one');
+  await key('3');
+  assert.deepEqual(await cursor(), { pile: 't2', index: 6, held: null }, '3 chose the third column, at its top card');
+  let r = await ring(), k = await box('#card-38');
+  assert.equal(r.active, 'card-38', 'and a screen reader is on the king of clubs');
+  assert.equal(await p7.evaluate(() => document.activeElement.id), 'table', 'with the table focused');
+  assert.ok(Math.abs(r.x - (k.x - 4)) < 1.5 && Math.abs(r.y - (k.y - 4)) < 1.5 && Math.abs(r.h - (k.h + 8)) < 1.5, 'the ring is round the card, just outside it');
+  assert.equal(r.border, 'rgb(244, 240, 227)', 'in the light look, a light ring');
+  await key('ArrowUp');
+  r = await ring();
+  const two = await box('#card-14');
+  assert.equal(r.active, 'card-14', 'ArrowUp went up the column to the 2 of hearts');
+  assert.ok(r.h < two.h * 0.7, 'its ring only round the part of it that shows');
+  await key('Enter');
+  await p7.waitForTimeout(300);
+  assert.equal((await now()).moves, 0, 'Enter on a card that cannot come up with the king on it only shakes it');
+  // Space picks the king up; ArrowUp takes it to the free cell above, outlined; Escape puts it back.
+  await key('ArrowDown');
+  await key(' ');
+  assert.deepEqual((await cursor()).held, [38], 'Space picked up the king of clubs');
+  await p7.waitForFunction(() => document.getElementById('said').textContent === 'Holding the king of clubs.', null, { timeout: 2000 });
+  assert.equal(await p7.evaluate(() => document.getElementById('card-38').classList.contains('held')), true);
+  await key('ArrowUp');
+  assert.equal((await cursor()).pile, 'c2', 'ArrowUp took it to the free cell above');
+  assert.equal(await p7.evaluate(() => document.getElementById('pile-c2').classList.contains('target')), true, 'outlined, as it can go there');
+  await key('Escape');
+  assert.equal((await cursor()).held, null, 'Escape put it back');
+  assert.equal(await p7.locator('.target, .held').count(), 0, 'with no outline left');
+  assert.equal((await now()).moves, 0);
+  // Put down where it can't go, it shakes and stays held; Space where it came from puts it back too.
+  await key('3');
+  await key(' ');
+  await key('1');
+  assert.equal(await p7.locator('.target').count(), 0, 'no outline on a column it cannot go on');
+  await key(' ');
+  await p7.waitForTimeout(300);
+  assert.deepEqual((await cursor()).held, [38], 'let go on the jack of diamonds, it is still held');
+  assert.equal((await now()).moves, 0);
+  await key('3');
+  await key(' ');
+  assert.equal((await cursor()).held, null, 'Space on its own column put it back');
+  await p7.waitForFunction(() => document.getElementById('said').textContent === 'Put back.', null, { timeout: 2000 });
+  await key('0');
+  assert.equal((await cursor()).pile, 't2', 'FreeCell has no tenth column for 0');
+  // Enter does what a tap does: the king goes to a free cell.
+  await key('Enter');
+  await ready();
+  s = await now();
+  assert.equal(s.cells.filter(c => c === 38).length, 1, 'Enter sent the king of clubs to a free cell, as a tap would');
+  assert.deepEqual(await cursor(), { pile: 't2', index: 5, held: null }, 'and the ring stayed on the column, now on its top card');
+  await key('z');
+  await ready();
+
+  // The whole game, by keys alone: for each of the solver's moves, the keys to choose the card, Space, the keys to
+  // choose where it goes, and Space. (No index: the pile's top card.)
+  const goTo = async (pile, index) => {
+    if (pile[0] === 't') {
+      await key(String(+pile.slice(1) + 1));
+      for (let i = 0; i < 20 && index !== undefined && (await cursor()).index > index; i++) await key('ArrowUp');
+    } else {
+      await key('1');
+      for (let i = 0; i < 30 && (await cursor()).pile[0] === 't'; i++) await key('ArrowUp'); // up the column, then the top row
+      for (let i = 0; i < 10 && (await cursor()).pile !== pile; i++) await key('ArrowRight');
+    }
+    const c = await cursor();
+    assert.equal(c.pile, pile);
+    if (pile[0] === 't' && index !== undefined) assert.equal(c.index, index);
+  };
+  for (let turn = 0; turn < 200; turn++) {
+    await ready();
+    if (!(await p7.isHidden('#won'))) break;
+    const m = await p7.evaluate(async () => {
+      const { freecell } = await import('./js/games/freecell.js');
+      const s = window.patience.state;
+      if (freecell.won(s)) return null;
+      const search = freecell.search(s);
+      while (!search.result) search.step(5000);
+      return { ...freecell.fromSolver(s, search.path[0]), up: freecell.pile(s, freecell.fromSolver(s, search.path[0]).from).up.length };
+    });
+    if (!m) break;
+    const before = await now();
+    await goTo(m.from, m.up - m.n);
+    await key(' ');
+    await goTo(m.to); // its top card
+    await key(' ');
+    // (Once the rest can go up by themselves, they do, and the won panel comes.)
+    await p7.waitForFunction(() => (window.patience.state && !window.patience.busy) || !document.getElementById('won').hidden, null, { timeout: 15000 });
+    const after = await now();
+    if (!(after.moves > before.moves)) assert.fail(`keys did not play ${JSON.stringify(m)}`);
+    if (!(await p7.isHidden('#won'))) break;
+  }
+  await p7.waitForSelector('#won:not([hidden])', { timeout: 10000 });
+  s = await now();
+  assert.equal(s.found.flat().length, 52, 'FreeCell 617 won by keyboard alone');
+  assert.equal(await ring(), null, 'with no ring left over the cards as they bounce');
+
+  // Klondike: with the ring on the deck, Space draws (so does Enter); with nothing chosen, Space still uses the deck.
+  await p7.evaluate(() => window.patience.newGame('k1', 52817));
+  await p7.waitForTimeout(1500);
+  await ready();
+  await key('Escape');
+  assert.equal(await cursor(), null, 'Escape took the ring away');
+  await key(' ');
+  await ready();
+  assert.equal((await now()).stock.length, 23, 'with no ring, Space drew a card');
+  await key('7');
+  await key('ArrowUp');
+  assert.equal((await cursor()).pile, 'stock', 'up from the last column is the deck');
+  assert.equal((await ring()).active, 'pile-stock', 'which a screen reader hears as the deck');
+  await key(' ');
+  await ready();
+  assert.equal((await now()).stock.length, 22, 'Space on the deck drew a card');
+  await key('Enter');
+  await ready();
+  assert.equal((await now()).stock.length, 21, 'and so did Enter');
+  // H, with the ring showing, takes it to the card Hint lights up, so Enter plays Hint's move.
+  // Klondike deal 11705 after 18 cards drawn: Hint's move is the 8 of hearts (20) onto the 9 of clubs (34) in the third column.
+  await p7.evaluate(async () => {
+    const k = await import('./js/games/klondike.js');
+    const settle = s => { for (let st; (st = k.autoStep(s));) s = k.move(s, st.from, st.n, st.to); return s; };
+    let s = settle(k.deal(11705, 1));
+    for (let i = 0; i < 18; i++) s = settle(k.draw(s));
+    window.patience.load(s);
+  });
+  await ready();
+  await key('1');
+  await key('h');
+  await p7.waitForSelector('.hint', { timeout: 20000 });
+  assert.equal((await ring()).active, 'card-20', 'H took the ring to the card Hint lit up, the 8 of hearts');
+  await key('Enter');
+  await ready();
+  assert.deepEqual((await now()).tab[2].up.slice(-2), [34, 20], 'and Enter played its move');
+  // In the dark look the ring is light too; a click takes it away.
+  await p7.emulateMedia({ colorScheme: 'dark' });
+  assert.equal((await ring()).border, 'rgb(233, 228, 214)', 'in the dark look, a light ring');
+  const felt = await box('#table');
+  await p7.mouse.click(felt.x + felt.w / 2, felt.y + felt.h - 20);
+  assert.equal(await cursor(), null, 'a click took the ring away');
+  assert.equal(await ring(), null);
+  // Spider: 0 is the tenth column.
+  await p7.evaluate(() => window.patience.newGame('s1', 5));
+  await p7.waitForTimeout(2500);
+  await ready();
+  await key('0');
+  assert.equal((await cursor()).pile, 't9', '0 chose the tenth column');
+  assert.deepEqual(errors, [], 'errors playing by keyboard');
+  await c7.close();
+}
+
 // To a screen reader the table is its piles, in the order they're laid out, each named for what it is and what's in
 // it, holding the cards that can be seen, in order: no face-down card's rank, no corner letters, and no empty place
 // without a name. Klondike deal 52,817 as dealt, then FreeCell and Spider.

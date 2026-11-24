@@ -7,7 +7,7 @@ import { cascade } from './win.js';
 import { suitSprite } from './suits.js';
 import { shortName } from './cards.js';
 import { guardEdges } from './edge-guard.js';
-import { moveWords, aftermath, upWords, hintWords } from './words.js';
+import { moveWords, aftermath, upWords, hintWords, heldWords } from './words.js';
 import { DAILY_START, DAILY_DEALS } from './games/daily-deals.js';
 
 const KEY = 'patience.v1';
@@ -107,6 +107,7 @@ const table = new Table($('table'), {
     if (!to) liftNoted = true;
     toast(why);
   },
+  held: cards => say(heldWords(cards)),
 });
 let liftNoted = false; // the game has said why cards couldn't be picked up, this deal
 // A Back that comes while a card is held, or just after the browser took a touch away from the table (as Android's
@@ -538,6 +539,7 @@ function victory() {
   chain = 0;
   recordWin();
   table.locked = true;
+  table.hideCursor(); // no ring left over the cards as they bounce
   showInfo(); // the last cards may have gone up by themselves; Undo goes off
   const st = stats[game.v];
 
@@ -1118,17 +1120,27 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.altKey || !game) return;
-  // Escape lets go: of a card held with the mouse, or else the message showing, and focus goes back to the table.
+  // Escape lets go: of a card held with the mouse, or else cards held with the keyboard, or else the message showing,
+  // or else the place the arrow keys chose; and focus goes back to the table.
   if (k === 'escape') {
     if (table.drag) table.letGo();
-    else hideToast();
+    else if (table.held) table.putBack(true);
+    else if (!$('toast').hidden) hideToast();
+    else table.hideCursor();
     focusTable();
     return;
   }
   if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } // held down, it keeps stepping back
   else if (e.ctrlKey || e.metaKey) return;
+  // The arrow keys choose a place on the table, and 1 to 9 and 0 a column (held down, an arrow keeps going).
+  else if (ARROWS[k]) { e.preventDefault(); focusTable(); table.steer(ARROWS[k]); }
+  else if (/^[0-9]$/.test(k) && !e.repeat) { focusTable(); table.toColumn(+k || 10); }
   else if (e.repeat) { if (k === ' ' || k === 'enter') e.preventDefault(); } // the others, held down, do it once
   else if ((k === ' ' || k === 'enter') && keyFocus && e.target.closest?.('button, a, summary')) return; // the key presses it
+  // With a place chosen, Space picks up and puts down there, and Enter does what a tap there would. Without one, Space
+  // (and D, always) uses the deck, and Enter plays the move Hint is showing.
+  else if (k === ' ' && table.cursor) { e.preventDefault(); table.pickUp(); }
+  else if (k === 'enter' && table.cursor) { e.preventDefault(); table.press(); }
   else if (k === ' ' || k === 'd') { e.preventDefault(); table.on.stock(); }
   else if (k === 'enter' && table.shown) { e.preventDefault(); play(table.shown); }
   else if (k === 'h') hint();
@@ -1138,7 +1150,9 @@ document.addEventListener('keydown', e => {
 // Whether the keyboard brought focus to where it is (Tab, or Escape closing a sheet). A button there takes Space and
 // Enter; a button that kept focus after a click or tap leaves Space to the deck, and Enter to the move Hint is showing.
 let byKey = false, keyFocus = false;
-document.addEventListener('pointerdown', () => { byKey = false; table.el.classList.remove('keyed'); }, true);
+const ARROWS = { arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down' };
+// A finger or the mouse, anywhere, takes the ring away too, and puts back any cards the keyboard is holding.
+document.addEventListener('pointerdown', () => { byKey = false; table.el.classList.remove('keyed'); table.hideCursor(); }, true);
 document.addEventListener('keydown', () => { byKey = true; }, true);
 document.addEventListener('focusin', e => {
   keyFocus = byKey;
@@ -1237,6 +1251,7 @@ function resume(kept) {
 window.patience = {
   get state() { return game; },
   get busy() { return table.locked || !!chain || table.moving; },
+  get cursor() { return table.cursor && { ...table.cursor, held: table.held?.cards.slice() || null }; },
   load(state, ms = 0, past = []) { cancelChain(); clearTimeout(landed); game = state; history = past.slice(); elapsed = ms; since = 0; winCounted = false; table.locked = false; table.render(game, { still: true }); showInfo(); after(); },
   newGame,
   settings,

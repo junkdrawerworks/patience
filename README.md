@@ -34,7 +34,7 @@
 - **The bouncing cards** when you win, as tradition requires.
 - **Your record** for each of the six ways of playing: games played, won, win rate, streak, best streak, fastest win, fewest moves, and Today's deal: how long it took today, and days in a row. Clear this record, under it, starts one way of playing again from nothing, after asking once. Save a copy of your record, at the foot of the menu, gives you a small file, named something like patience-record-2026-11-23.json, with your record and settings in it; Bring back a record, on a new phone or after your browser has cleared its data, adds it to the record there and brings the settings back. No record is ever added twice, even one that came across inside another phone's copy.
 - **Settings:** only deal games that can be won, send cards up by themselves, show the time and moves, four-colour suits (clubs green, diamonds blue), the deck on the left instead of under your right thumb, and the look: light or dark, or whatever your phone is set to.
-- **On a keyboard,** Space uses the deck in Klondike and Spider, Z undoes, H gives a hint, Enter plays it and N opens New game (Enter there deals another of the same).
+- **On a keyboard,** you can play every move. The arrow keys choose a card or a place, with a ring round it, and 1 to 9 and 0 jump to a column. Enter does what a tap there would; Space picks the cards up, and again puts them down where the arrows have taken them, outlining the place while they can go there; Escape puts them back. Space on the deck, or with nothing chosen, uses the deck in Klondike and Spider (so does D). Z undoes, H gives a hint, Enter plays it and N opens New game (Enter there deals another of the same).
 - No ads, no account and no server. Your games, your record and your settings stay in your browser. It works offline and installs to a phone's home screen. On an iPhone, installing it keeps your record safest: Safari clears what a site has saved after seven days of using Safari without opening it, and an app on the home screen keeps its own count.
 
 ## Running it
@@ -66,7 +66,7 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `js/solvers/freecell.js`: the FreeCell solver. In the 100,000 positions it gets to check a deal before it reaches you, it wins 98 of the first 100 Windows deals in about a tenth of a second each (99 in the 200,000 Hint gets), and proves game 11982, the famous one, can't be won.
 - `js/solvers/spider.js`: the Spider solver. In the 120,000 positions it gets to check a deal before it reaches you, it wins nearly every one-suit deal and nine in ten two-suit deals; four-suit deals are harder, about one in four. To be quick it leaves out moves that seldom help, like moving only part of a run, so before Hint says a game can't be won it looks again with every move.
 - `js/deals.js`: runs a solver a slice at a time, between frames, to find winnable deals and hints, and for Take me back, the last move a game could still be won from.
-- `js/table.js`: the table. Card sizes and layout for whichever game it is, the movement, tapping and dragging.
+- `js/table.js`: the table. Card sizes and layout for whichever game it is, the movement, tapping and dragging, and choosing and moving cards by keyboard.
 - `js/win.js`: the bouncing cards.
 - `js/words.js`: what each move did, in a few words, for a screen reader to read out once it has settled.
 - `js/edge-guard.js`: keeps a Back that comes in the middle of a drag (a swipe near the side of a phone's screen) from closing the game.
