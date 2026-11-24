@@ -12,7 +12,7 @@ import { DAILY_START, DAILY_DEALS } from './games/daily-deals.js';
 
 const KEY = 'patience.v1';
 const $ = id => document.getElementById(id);
-const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four: false, left: false, look: 'phone' };
+const DEFAULTS = { variant: 'k1', winnable: true, auto: true, clock: true, four: false, left: false, buzz: false, look: 'phone' };
 const LOOKS = ['phone', 'light', 'dark']; // Look in the menu: whatever the phone is set to, or light or dark whatever it says
 // day: the last day a Today's deal was won (see dayOf()), 0 for none; dayTime: how long that win took; days: how many
 // days in a row it had been won, up to that one.
@@ -89,6 +89,7 @@ const table = new Table($('table'), {
     if (act(G().stock(game), { stock: true })) return;
     const note = G().stockNote(game);
     if (!note) return;
+    table.feel();
     toast(note.text);
     table.flagSpots(note.piles);
   },
@@ -834,7 +835,9 @@ function bringBack(copy) {
 
 // ---- settings ----
 
-const toggles = { winnable: 'o-winnable', auto: 'o-auto', clock: 'o-clock', four: 'o-four', left: 'o-left' };
+const toggles = { winnable: 'o-winnable', auto: 'o-auto', clock: 'o-clock', four: 'o-four', left: 'o-left', buzz: 'o-buzz' };
+// A browser that can't buzz (Safari, on an iPhone) doesn't show the setting at all.
+$('buzz-setting').hidden = typeof navigator.vibrate !== 'function';
 for (const [k, id] of Object.entries(toggles)) {
   $(id).addEventListener('change', e => {
     settings[k] = e.target.checked;
@@ -869,6 +872,7 @@ function apply() {
   applyLook();
   document.documentElement.toggleAttribute('data-four', settings.four);
   $('clock').hidden = !settings.clock;
+  table.buzz = settings.buzz;
   if (table.left !== settings.left) {
     table.left = settings.left;
     if (game) table.render(game, { still: true });

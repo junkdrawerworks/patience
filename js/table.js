@@ -18,6 +18,7 @@ export class Table {
     this.on = handlers;
     this.state = null;
     this.left = false;
+    this.buzz = false; // a short buzz when cards shake, or the deck won't deal (see feel())
     this.locked = false;
     this.spots = {};
     this.cards = new Map(); // card -> element
@@ -861,6 +862,7 @@ export class Table {
   shake(pile, n) { this.shakeCards(this.game.pile(this.state, pile).up.slice(-n)); }
 
   shakeCards(cards) {
+    if (cards.length) this.feel();
     for (const c of cards) {
       const el = this.cards.get(c);
       el.classList.remove('shake');
@@ -868,6 +870,13 @@ export class Table {
       el.classList.add('shake');
       setTimeout(() => el.classList.remove('shake'), 400);
     }
+  }
+
+  // A short buzz, with the setting on, where the phone can: for cards that shake, and from app.js for a deck that won't
+  // deal. Nothing at all where the browser can't (Safari, on an iPhone).
+  feel() {
+    if (!this.buzz || typeof navigator.vibrate !== 'function') return;
+    try { navigator.vibrate(12); } catch { /* not allowed here */ }
   }
 
   // Light up a suggested move: the card to pick up (or the stock), and where it goes. It pulses three times, then

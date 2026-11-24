@@ -2724,6 +2724,113 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cw.close();
 }
 
+// Buzz when a move won't go: off at first, then, once turned on, a 12 ms buzz where a card shakes (a Spider run of two
+// suits, a covered Pyramid card) and where the deck won't deal (Spider with an empty column, Pyramid after its third
+// time through), and none for a move that goes. It sticks after a reload. A browser that can't buzz doesn't show it.
+{
+  const cb = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  await cb.addInitScript(() => {
+    window.buzzes = [];
+    Object.defineProperty(Navigator.prototype, 'vibrate', { configurable: true, value: ms => { window.buzzes.push(ms); return true; } });
+  });
+  const pb = await cb.newPage();
+  const errors = [];
+  pb.on('pageerror', e => errors.push(e.message));
+  const ready = () => pb.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const buzzes = () => pb.evaluate(() => window.buzzes.splice(0));
+  const tapAt = async (sel, dy = 0.15) => {
+    const [x, y] = await pb.$eval(sel, (e, dy) => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height * dy]; }, dy);
+    await pb.touchscreen.tap(x, y);
+    await pb.waitForTimeout(300);
+    await ready();
+  };
+  await pb.goto(base);
+  await ready();
+  await pb.evaluate(() => { window.patience.settings.auto = false; for (const v of ['k1', 's1', 's2', 'py']) window.patience.stats[v].played = 1; });
+  // Two-suit Spider deal 1, with the 7 of spades and 6 of hearts from the deck on the first column.
+  const mixed = await pb.evaluate(async () => {
+    const { spider } = await import('./js/games/spider.js');
+    const s = spider.deal(1, 's2');
+    const a = s.stock.find(c => c % 52 === 6), b = s.stock.find(c => c % 52 === 13 + 5);
+    s.stock = s.stock.filter(c => c !== a && c !== b);
+    s.tab[0].up.push(a, b);
+    window.patience.load(s);
+    return a;
+  });
+  await ready();
+  await tapAt(`#card-${mixed}`);
+  assert.deepEqual(await buzzes(), [], 'off at first: the 7 shakes, with no buzz');
+
+  await pb.click('#b-menu');
+  assert.equal(await pb.isVisible('#buzz-setting'), true, 'offered where the browser can buzz');
+  assert.equal(await pb.getByRole('checkbox', { name: 'Buzz when a move won\'t go', exact: true }).isChecked(), false);
+  await pb.click('label:has(#o-buzz)');
+  await pb.click('#sheet-menu .close');
+  await pb.waitForTimeout(300);
+  await tapAt(`#card-${mixed}`);
+  assert.deepEqual(await buzzes(), [12], 'turned on, the 7 shakes and buzzes once');
+  // One-suit Spider, a king in one column, a queen and jack in another and the rest empty: the deck won't deal a row.
+  await pb.evaluate(() => {
+    const tab = Array.from({ length: 10 }, (_, i) => ({ down: [], up: [[7 * 52 + 12], [7 * 52 + 11, 7 * 52 + 10]][i] ?? [] }));
+    window.patience.load({ v: 's1', deal: 1, moves: 300, tab, stock: Array.from({ length: 10 }, (_, r) => 7 * 52 + r),
+      sets: Array.from({ length: 7 }, (_, k) => Array.from({ length: 13 }, (_, r) => k * 52 + r)) });
+  });
+  await ready();
+  await tapAt('.spot[data-pile="stock"]', 0.5);
+  await pb.waitForFunction(() => !document.getElementById('toast').hidden);
+  assert.deepEqual(await buzzes(), [12], 'the Spider deck that won\'t deal buzzes');
+
+  // Pyramid: the king goes with no buzz, the covered queen shakes and buzzes, and after the third time through, the empty deck buzzes too.
+  const Q = 24, pyramid = { 20: Q, 21: 49, 22: 27, 23: 45, 24: 39, 26: 5, 27: 38 };
+  const loadPyramid = (page, cards) => page.evaluate(cards => {
+    const pyr = Array(28).fill(null);
+    Object.entries(cards).forEach(([p, c]) => { pyr[p] = c; });
+    const out = Array.from({ length: 52 }, (_, c) => c).filter(c => !pyr.includes(c) && c !== 14);
+    window.patience.load({ v: 'py', deal: 1, pyr, stock: [], drawn: [], waste: [14], out, pass: 3, moves: 40 });
+  }, cards);
+  await loadPyramid(pb, pyramid);
+  await ready();
+  await tapAt('#card-38', 0.2);
+  assert.equal((await pb.evaluate(() => window.patience.state)).pyr[27], null, 'the king went');
+  assert.deepEqual(await buzzes(), [], 'a move that goes doesn\'t buzz');
+  await tapAt(`#card-${Q}`, 0.2);
+  assert.deepEqual(await buzzes(), [12], 'the covered queen buzzes');
+  await tapAt('.spot[data-pile="stock"]', 0.5);
+  await pb.waitForFunction(() => !document.getElementById('toast').hidden);
+  assert.equal(await pb.textContent('#toast-words'), 'That was the third time through the deck, the last.');
+  assert.deepEqual(await buzzes(), [12], 'and so does the deck, after its last time through');
+
+  await pb.reload();
+  await ready();
+  assert.equal(await pb.evaluate(() => document.getElementById('o-buzz').checked), true, 'the setting sticks');
+  assert.deepEqual(errors, [], 'errors with the buzz on');
+  await cb.close();
+
+  // A browser with no way to buzz (Safari) doesn't offer it, and a record brought over with it on buzzes nothing.
+  const cn = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, serviceWorkers: 'block' });
+  await cn.addInitScript(() => {
+    delete Navigator.prototype.vibrate;
+    try { localStorage.setItem('patience.v1', JSON.stringify({ introduced: ['klondike', 'freecell', 'spider', 'pyramid'], settings: { buzz: true, variant: 'py' } })); } catch { /* blocked */ }
+  });
+  const pn = await cn.newPage();
+  const quiet = [];
+  pn.on('pageerror', e => quiet.push(e.message));
+  await pn.goto(base);
+  await pn.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  assert.equal(await pn.evaluate(() => typeof navigator.vibrate), 'undefined');
+  await pn.click('#b-menu');
+  assert.equal(await pn.isHidden('#buzz-setting'), true, 'not offered where the browser can\'t buzz');
+  await pn.click('#sheet-menu .close');
+  await loadPyramid(pn, pyramid);
+  await pn.waitForFunction(() => !window.patience.busy);
+  const [qx, qy] = await pn.$eval(`#card-${Q}`, e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height * 0.2]; });
+  await pn.touchscreen.tap(qx, qy);
+  await pn.waitForFunction(() => document.querySelector('.card.shake'), null, { timeout: 3000 });
+  await pn.waitForTimeout(300);
+  assert.deepEqual(quiet, [], 'errors with nothing to buzz');
+  await cn.close();
+}
+
 // A card let go where it was picked up, nudged a little, stays in its column, though it would fit on the next; one let
 // go mostly over a column it can't go on goes back, though it touches one it could; one let go mostly over a column
 // it can go on goes there. One-suit Spider with a mouse, where the columns are close together.
