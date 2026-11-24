@@ -50,7 +50,7 @@ async function open(viewport, deviceScaleFactor, scheme = 'light') {
     window.reseed(seed);
     // With "Only deal games that can be won" off, no deal is being found in the background (every deal here is chosen),
     // so nothing else takes numbers from Math.random while the cards bounce.
-    localStorage.setItem('patience.v1', JSON.stringify({ settings: { winnable: false }, stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 300000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } }, introduced: ['klondike', 'freecell', 'spider'] }));
+    localStorage.setItem('patience.v1', JSON.stringify({ settings: { winnable: false }, stats: { k1: { played: 23, won: 17, streak: 4, best: 6, fastest: 300000 }, k3: { played: 9, won: 5, streak: 1, best: 2, fastest: 263000 } }, introduced: ['klondike', 'freecell', 'spider', 'pyramid'] }));
   }, SEED);
   await page.goto(base);
   await page.evaluate(() => document.fonts.ready);
@@ -102,6 +102,14 @@ async function bounce(page, win, ms) {
   await page.evaluate(playInto, { v: 's2', n: 5, steps: 70, ms: 420000 });
   await settle(page);
   await shot('phone-spider');
+  // Pyramid part way, with Hint lighting up a pair.
+  await fresh('py', 28714);
+  await page.evaluate(playInto, { v: 'py', n: 28714, steps: 19, ms: 95000 });
+  await settle(page);
+  await page.click('#b-hint');
+  await page.waitForSelector('.hint');
+  await page.waitForTimeout(3300);
+  await shot('phone-pyramid');
 
   // Choosing a game.
   await page.click('#b-new');
@@ -141,7 +149,7 @@ async function bounce(page, win, ms) {
     p { margin: 26px 0 0; font: 500 31px/1.32 Figtree; color: rgba(244, 240, 227, 0.86); max-width: 470px; }
     img { width: 620px; height: 630px; display: block; -webkit-mask-image: linear-gradient(90deg, transparent, #000 60px); }
   </style>
-  <div class="words"><h1>Patience</h1><p>Klondike, FreeCell and Spider with no ads. Every deal can be won, and it works offline.</p></div>
+  <div class="words"><h1>Patience</h1><p>Klondike, FreeCell, Spider and Pyramid with no ads. Every deal can be won, and it works offline.</p></div>
   <img src="data:image/png;base64,${shot}">`);
   await card.evaluate(() => document.fonts.ready);
   await save(await card.screenshot(), 'og.png');
