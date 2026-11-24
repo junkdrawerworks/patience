@@ -371,7 +371,7 @@ await page.selectOption('#stats-for', 'fc');
 assert.match(await page.textContent('#stats'), /Won\s*1/);
 await page.click('#sheet-menu .close');
 
-// The install sheet and package.json describe it the way the link preview does, all three games.
+// The install sheet and package.json describe it the way the link preview does, all four games.
 const og = await page.getAttribute('meta[property="og:description"]', 'content');
 const manifest = await page.evaluate(async () => (await (await fetch('manifest.webmanifest')).json()).description);
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).description;
