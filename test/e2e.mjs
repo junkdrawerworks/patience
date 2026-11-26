@@ -3143,6 +3143,71 @@ assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems o
   await cz.close();
 }
 
+// Held sideways, Spider's cleared runs and deck go either side of the columns, which then have the whole height, and the
+// cards are sized to the deal, not to a long column it may never have: 50 px at 844 by 390 rather than 34. Klondike,
+// FreeCell and Pyramid keep their top row. Upright, ten columns can't be wider, so a small card's rank is printed larger:
+// 15.5 px on 31 px cards, not 12, still showing in full under the next card.
+{
+  const ca = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pa = await ca.newPage();
+  await pa.goto(base);
+  await pa.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const look = v => pa.evaluate(async v => {
+    const { VARIANTS } = await import('./js/games/index.js');
+    window.patience.load(VARIANTS[v].game.deal(5, v), 0);
+    await new Promise(r => setTimeout(r, 300));
+    const box = sel => document.querySelector(sel)?.getBoundingClientRect();
+    const cols = [...document.querySelectorAll('.spot[data-kind="column"]')].map(e => e.getBoundingClientRect());
+    const table = document.getElementById('table');
+    return { cw: parseFloat(table.style.getPropertyValue('--cw')), stock: box('.spot[data-pile="stock"]'), sets: box('.spot[data-pile="sets"]'),
+      first: cols[0] && { left: cols[0].left, top: cols[0].top }, last: cols.at(-1) && { right: cols.at(-1).right },
+      fits: Math.max(...[...table.querySelectorAll('.card')].map(e => e.getBoundingClientRect().right)) <= innerWidth };
+  }, v);
+  const sp = await look('s2');
+  assert.ok(sp.cw >= 48, `Spider held sideways, cards ${sp.cw} px`);
+  assert.ok(sp.stock.left > sp.last.right && sp.sets.right < sp.first.left, 'the deck to the right of the columns, the cleared runs to the left');
+  assert.ok(Math.abs(sp.stock.top - sp.first.top) < 1 && Math.abs(sp.sets.top - sp.first.top) < 1, 'level with the columns\' tops');
+  assert.ok(sp.fits, 'nothing off the side');
+  // With the deck on the left, they swap sides.
+  await pa.evaluate(() => { document.getElementById('o-left').click(); });
+  const lf = await look('s2');
+  assert.ok(lf.stock.right < lf.first.left && lf.sets.left > lf.last.right, 'deck on the left: the deck left of the columns, the runs right');
+  await pa.evaluate(() => { document.getElementById('o-left').click(); });
+  for (const v of ['k1', 'fc', 'py']) {
+    await look(v);
+    const kept = await pa.evaluate(() => {
+      const r = sel => [...document.querySelectorAll(sel)].map(e => e.getBoundingClientRect());
+      const top = r('.spot:is([data-kind="stock"], [data-kind="stack"], [data-kind="waste"])'), below = r('.spot:is([data-kind="column"], [data-kind="place"])');
+      return Math.max(...top.map(b => b.bottom)) <= Math.min(...below.map(b => b.top));
+    });
+    assert.ok(kept, `${v}: the top row stays above the rest`);
+  }
+  await ca.close();
+  const cu = await browser.newContext({ viewport: { width: 412, height: 870 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  const pu = await cu.newPage();
+  await pu.goto(base);
+  await pu.waitForFunction(() => window.patience?.state && !window.patience.busy, null, { timeout: 15000 });
+  const up = await pu.evaluate(async () => {
+    const { VARIANTS } = await import('./js/games/index.js');
+    const s = VARIANTS.s1.game.deal(5, 's1'), all = [...s.stock];
+    s.tab.forEach(t => all.push(...t.down, ...t.up));
+    // A column of twelve face-up cards, with the 10 in it, under the next.
+    const tab = Array.from({ length: 10 }, (_, i) => ({ down: [], up: all.splice(0, i ? 1 : 12) }));
+    window.patience.load({ ...s, stock: all.splice(0, 10), tab, moves: 3 }, 0);
+    await new Promise(r => setTimeout(r, 300));
+    const table = document.getElementById('table'), ix = c => document.querySelector(`#card-${c} .ix`);
+    const col = tab[0].up, rects = col.map(c => document.getElementById('card-' + c).getBoundingClientRect());
+    const shown = col.slice(0, -1).every((c, i) => ix(c).getBoundingClientRect().bottom <= rects[i + 1].top + 0.5);
+    const ten = col.find(c => ix(c).textContent === '10') ?? col[0], card = document.getElementById('card-' + ten).getBoundingClientRect();
+    const t = ix(ten).getBoundingClientRect(), su = document.querySelector(`#card-${ten} .cs`).getBoundingClientRect();
+    return { cw: parseFloat(table.style.getPropertyValue('--cw')), size: parseFloat(getComputedStyle(ix(col[0])).fontSize), shown, apart: t.right <= su.left + 0.5 && t.left >= card.left && su.right <= card.right };
+  });
+  assert.ok(up.cw <= 32 && up.size >= 15, `upright, ${up.cw} px cards print their rank ${up.size} px tall`);
+  assert.ok(up.shown, 'each rank shows in full above the card on it');
+  assert.ok(up.apart, "a 10 and its suit don't run into each other or off the card");
+  await cu.close();
+}
+
 // Face-up cards in the columns spread out as far as half a card while there's room below, every column alike so they
 // line up, and closer once the longest column needs it, still fitting. Once closer, they don't spread out again for the
 // rest of the deal. A covered card shows its corner and none of its middle. Two-suit Spider deal 5 on a 390 by 844 phone.

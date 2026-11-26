@@ -70,8 +70,8 @@ export class Table {
 
   // Card size and where each pile goes, from the size of the table.
   layout() {
-    const s = this.state, L = gameOf(s).layout(s, this.left);
-    const W = this.el.clientWidth, H = this.el.clientHeight, cols = L.cols, narrow = cols > 8;
+    const s = this.state, L0 = gameOf(s).layout(s, this.left);
+    const W = this.el.clientWidth, H = this.el.clientHeight, cols = L0.cols, narrow = cols > 8;
     const pad = clamp(W * 0.02, narrow ? 4 : 6, 18);
     const gap = clamp(W * 0.012, narrow ? 3 : 4, 14);
     const rowGap = clamp(gap * 1.8, 8, 22);
@@ -87,7 +87,15 @@ export class Table {
     // Once a column has made the cards smaller, they stay that size for the rest of the deal, even when it gets shorter
     // again (`need`, from this.tall: the most rows the deal has needed so far), rather than growing and shrinking back
     // and forth as a column is played down and built up. A new deal, or a new size of table, starts afresh.
-    const fit = rows => Math.max(20, Math.floor(Math.min((W - 2 * side - (cols - 1) * gap) / cols, (H - 2 * pad - rowGap) / (1.4 * rows), 124)));
+    const fitTop = rows => Math.max(20, Math.floor(Math.min((W - 2 * side - (cols - 1) * gap) / cols, (H - 2 * pad - rowGap) / (1.4 * rows), 124)));
+    // Held sideways (or on a computer), where the height runs out long before the width, a game whose top row is just a
+    // pile at each end (Spider's cleared runs and deck) puts those two in the room either side of the columns, three
+    // gaps out, so the columns have the whole height. The cards are then sized to what's on the table (no smaller than
+    // ASIDE_ROWS allows), not to a long column the deal may never have, and get smaller only if one comes.
+    const ends = !L0.places && L0.top.length > 0 && L0.top.length <= 2 && L0.top.every(p => p.col === 0 || p.col === cols - 1);
+    const fitSide = rows => Math.max(20, Math.floor(Math.min((W - 2 * side - (cols + 5) * gap) / (cols + 2), (H - 2 * pad) / (1.4 * (rows - 1)), 124)));
+    this.aside = ends && W > H && fitSide(L0.rows || 4.9) > fitTop(L0.rows || 4.9) * 1.05;
+    const L = this.allowed(L0), fit = this.aside ? fitSide : fitTop;
     const usual = fit(L.rows || 4.9), least = Math.min(usual, 28);
     const need = step => this.rowsNeeded(s, L, step);
     let step = stepUp(usual), cw = Math.max(least, fit(need(step)));
@@ -96,8 +104,9 @@ export class Table {
     const ch = Math.round(cw * 1.4);
     const left = Math.round((W - (cols * cw + (cols - 1) * gap)) / 2);
     const x = Array.from({ length: cols }, (_, i) => left + i * (cw + gap));
-    const m = { W, H, pad, gap, cw, ch, top: pad, tabY: pad + ch + rowGap, x, spot: {}, y: {}, kind: {}, dir: {}, order: {}, names: {}, row: {}, under: {}, step, layoutKey: this.layoutKey(s, step) };
-    L.top.forEach((p, i) => { m.spot[p.id] = x[p.col]; m.y[p.id] = m.top; m.kind[p.id] = p.kind; m.dir[p.id] = p.dir || 1; m.order[p.id] = i; m.names[p.id] = p.name; });
+    const m = { aside: this.aside, W, H, pad, gap, cw, ch, top: pad, tabY: this.aside ? pad : pad + ch + rowGap, x, spot: {}, y: {}, kind: {}, dir: {}, order: {}, names: {}, row: {}, under: {}, step, layoutKey: this.layoutKey(s, step) };
+    const aside = p => (p.col === 0 ? left - cw - 3 * gap : x[cols - 1] + cw + 3 * gap);
+    L.top.forEach((p, i) => { m.spot[p.id] = this.aside ? aside(p) : x[p.col]; m.y[p.id] = m.top; m.kind[p.id] = p.kind; m.dir[p.id] = p.dir || 1; m.order[p.id] = i; m.names[p.id] = p.name; });
     L.tableau.forEach((id, i) => { m.spot[id] = x[i]; m.y[id] = m.tabY; m.kind[id] = 'column'; m.order[id] = 100 + i; });
     // Places that hold a card each, anywhere below the top row (Pyramid's), each row half a card or a little more below
     // the one before, as the room allows, so each card shows its top half.
@@ -145,7 +154,14 @@ export class Table {
     st.setProperty('--cw', cw + 'px');
     st.setProperty('--ch', ch + 'px');
     st.setProperty('--r', Math.max(3, Math.round(cw * 0.08)) + 'px');
+    // The corner's rank and suit: on a small card, a larger part of it (see rankH()), with a narrower margin to fit a 10.
+    st.setProperty('--ix', rankH(cw) + 'px');
+    st.setProperty('--cs', Math.max(cw * 0.24, Math.min(cw * 0.32, 10)) + 'px');
+    st.setProperty('--ixm', cw < 44 ? '5%' : '7%');
   }
+
+  // The layout with the room it allows for its columns at least: less with the top row at the sides (see layout()).
+  allowed(L) { return this.aside ? { ...L, rows: Math.min(L.rows || 4.9, ASIDE_ROWS) } : L; }
 
   // How many card heights tall the table needs to be for this state (see rowsFor()), or for the longest column the deal
   // has had so far at this size of table, if that was longer.
@@ -156,7 +172,7 @@ export class Table {
 
   // What the layout depends on, besides the size of the table: `step` is how far apart face-up cards can go at the size
   // the cards are now.
-  layoutKey(s, step) { return `${s.v}:${this.left ? 'L' : 'R'}:${this.rowsNeeded(s, gameOf(s).layout(s, this.left), step)}`; }
+  layoutKey(s, step) { return `${s.v}:${this.left ? 'L' : 'R'}:${this.aside ? 'A' : 'T'}:${this.rowsNeeded(s, this.allowed(gameOf(s).layout(s, this.left)), step)}`; }
 
   // Where every card goes for this state.
   place(s) {
@@ -177,11 +193,11 @@ export class Table {
           put(c, x0, m.top + Math.min(under, backs - 1) * off, z0 + i, false, i, under >= Math.max(2, backs));
         });
       } else if (kind === 'deals') {
-        // A row to deal is ten cards; each row left shows as its own card, fanned out.
-        const rows = Math.ceil(down.length / 10), step = Math.round(m.cw * 0.2);
+        // A row to deal is ten cards; each row left shows as its own card, fanned out (downwards, at the side).
+        const rows = Math.ceil(down.length / 10), step = m.aside ? Math.round(m.ch * 0.16) : Math.round(m.cw * 0.2);
         down.forEach((c, i) => {
-          const r = (i / 10) | 0, topOfRow = i % 10 === 9 || i === down.length - 1;
-          put(c, x0 + dir * (rows - 1 - r) * step, m.top, z0 + i, false, i, !(topOfRow || (r === rows - 1 && i >= down.length - 2)));
+          const r = (i / 10) | 0, topOfRow = i % 10 === 9 || i === down.length - 1, o = (rows - 1 - r) * step;
+          put(c, m.aside ? x0 : x0 + dir * o, m.aside ? m.top + o : m.top, z0 + i, false, i, !(topOfRow || (r === rows - 1 && i >= down.length - 2)));
         });
       } else if (kind === 'waste') {
         const fanned = game.fan?.(s) || 0, step = Math.round(m.cw * 0.46); // wide enough to read a covered 10
@@ -195,9 +211,13 @@ export class Table {
       } else if (kind === 'stack') {
         up.forEach((c, i) => put(c, x0, m.top, z0 + i, true, i, !this.showAll && deep(i, up.length, 2)));
       } else if (kind === 'sets') {
-        // Each cleared run is a pile of thirteen with its king on top, fanned out from the last.
-        const step = Math.round(m.cw * 0.3);
-        up.forEach((c, i) => put(c, x0 + dir * ((i / 13) | 0) * step, m.top, z0 + i, true, i, !this.showAll && i % 13 < 11));
+        // Each cleared run is a pile of thirteen with its king on top, fanned out from the last (downwards, at the side,
+        // as far as the table lets seven runs go).
+        const step = m.aside ? Math.max(4, Math.min(Math.round(m.ch * 0.28), Math.floor((m.H - 2 * m.pad - m.ch) / 7))) : Math.round(m.cw * 0.3);
+        up.forEach((c, i) => {
+          const o = ((i / 13) | 0) * step;
+          put(c, m.aside ? x0 : x0 + dir * o, m.aside ? m.top + o : m.top, z0 + i, true, i, !this.showAll && i % 13 < 11);
+        });
       } else {
         // Columns fan downwards, and squeeze up when they would run off the bottom.
         const nd = down.length, nu = up.length;
@@ -218,7 +238,7 @@ export class Table {
   }
 
   // How far apart face-up cards in the columns go, in card heights: as far as half a card while there's room below, and
-  // 0.36 once the longest column needs that (place() squeezes a column closer still if it must). One spacing for every
+  // 0.36 (or what shows a rank in full, if that's more) once the longest column needs that (place() squeezes a column closer still if it must). One spacing for every
   // column, so they line up, set by the column that needs the most room. Like the card size (see layout()), it doesn't
   // spread out again as a column gets shorter, for the rest of the deal at this size of table, so the cards don't shift
   // back and forth as one column is played down and built up.
@@ -230,7 +250,7 @@ export class Table {
       const { down, up } = g.pile(s, id);
       if (up.length > 1) u = Math.min(u, (room - down.length * m.ch * 0.13) / ((up.length - 1) * m.ch));
     }
-    u = Math.max(0.36, u);
+    u = Math.max(0.36, m.step, u);
     const size = `${m.W}x${m.H}:${m.ch}`;
     if (of && this.spread?.of === of && this.spread.size === size) u = Math.min(u, this.spread.u);
     this.spread = { of, size, u };
@@ -273,7 +293,7 @@ export class Table {
       this.cards.forEach(el => {
         el.classList.add('down');
         el.classList.remove('deep');
-        el.style.transform = `translate(${from}px, ${m.top}px)`;
+        el.style.transform = `translate(${from}px, ${m.y[m.dealFrom]}px)`;
         el.style.zIndex = 1;
       });
       this.el.classList.add('still');
@@ -927,7 +947,7 @@ export class Table {
     const r = this.el.getBoundingClientRect(), m = this.m;
     const hit = (x, y) => r.left + x < box.right && r.left + x + m.cw > box.left && r.top + y < box.bottom && r.top + y + m.ch > box.top;
     const deck = id => m.kind[id] === 'stock' || m.kind[id] === 'deals';
-    let cards = 0, onDeck = m.piles.some(id => deck(id) && hit(m.spot[id], m.top));
+    let cards = 0, onDeck = m.piles.some(id => deck(id) && hit(m.spot[id], m.y[id]));
     for (const p of this.at.values()) {
       if (p.up && !p.deep && hit(p.x, p.y)) cards++;
       if (deck(p.pile) && !p.deep && hit(p.x, p.y)) onDeck = true;
@@ -953,10 +973,18 @@ export class Table {
 }
 
 // The least of itself, in card heights, a card in a column shows under the next one. Face down, an edge. Face up, the
-// whole of its rank, a Q's tail and all, so it doesn't read O: the rank is max(12px, 0.36 of the card's width) tall and
-// starts 2.5% of the way down (.ix in the stylesheet), so on small cards it's a larger part of the card.
+// whole of its rank, a Q's tail and all, so it doesn't read O: the rank is rankH() tall and starts 2.5% of the way down
+// (.ix in the stylesheet), so on small cards it's a larger part of the card.
 const STEP_DOWN = 0.05;
-const stepUp = cw => Math.max(12, 0.36 * cw) / (1.4 * cw) + 0.025;
+const stepUp = cw => rankH(cw) / (1.4 * cw) + 0.025;
+// How tall a card's rank is (--ix in the stylesheet): 0.36 of its width, and on a small card, where it's what you read,
+// up to half of it, as far as 16 px; never under 12 px. On a phone's ten Spider columns, held upright, that's 15.5 px
+// rather than 12.
+const rankH = cw => Math.max(12, 0.36 * cw, Math.min(0.5 * cw, 16));
+
+// How many card heights the columns are allowed at least, with the top row at the sides (see layout()): room for a
+// deal's columns as dealt, the cards growing smaller as a column grows longer than that.
+const ASIDE_ROWS = 3.5;
 
 // How many card heights tall the table needs to be: the game's own allowance (L.rows, 4.9 if it gives none), or more if
 // a column is longer than that even with its face-up cards `up` apart, plus the row at the top. In half cards, so the

@@ -386,18 +386,18 @@ button { font: inherit; color: inherit; }
 
 .ix {
   position: absolute;
-  left: 7%;
+  left: var(--ixm, 7%);
   top: 2.5%;
-  font: 640 max(12px, calc(var(--cw) * 0.36)) / 1.05 var(--serif);
+  font: 640 var(--ix, max(12px, calc(var(--cw) * 0.36))) / 1.05 var(--serif);
   font-variation-settings: 'opsz' 30;
   letter-spacing: -0.05em;
 }
 .cs {
   position: absolute;
-  right: 7%;
+  right: var(--ixm, 7%);
   top: calc(var(--cw) * 0.07);
-  width: calc(var(--cw) * 0.24);
-  height: calc(var(--cw) * 0.24);
+  width: var(--cs, calc(var(--cw) * 0.24));
+  height: var(--cs, calc(var(--cw) * 0.24));
 }
 .pip {
   position: absolute;
@@ -527,6 +527,7 @@ button { font: inherit; color: inherit; }
   .toast[data-place='left'] { left: calc(var(--table-left) + 10px); transform: none; }
   .toast[data-place='right'] { left: auto; right: calc(var(--table-right) + 10px); transform: none; }
   .toast[data-place='top'] { top: calc(var(--table-top) + 8px); bottom: auto; }
+  .toast[data-narrow] { max-width: min(300px, calc(var(--table-width, 100vw) * 0.3)); }
 }
 
 /* ---- sheets (new game, menu) ---- */
